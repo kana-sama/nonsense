@@ -118,3 +118,74 @@ type not2<x extends bool> = the<bool,
   never>
 type not_tt = the<bool, not2<tt>>
 ```
+
+
+### simple expression language
+```lean
+def context : U => Record(string, number)
+external context-empty : context => "{}"
+external context-get(ctx : context, name : string) : number => "ctx[name]"
+external context-set(ctx : context, name : string, val : number) : context =>
+  "(Omit<ctx, name> & Record<name, val>)"
+
+inductive expr
+| lit(value : number)
+| ref(variable : string)
+| add(a b : expr)
+| local(variable : string, value next : expr)
+
+def eval(ctx : context, e : expr) : number =>
+  match e
+  | lit(?x) => x
+  | ref(?x) => context-get(ctx, x)
+  | add(?a, ?b) => plus(eval(ctx, a), eval(ctx, b))
+  | local(?name, ?value, ?next) =>
+      let evaled-value : number => eval(ctx, value)
+          new-context : context => context-set(ctx, name, evaled-value)
+       in eval(new-context, next)
+
+def pure(e : expr) : number =>
+  eval(context-empty, e)
+
+def a : number =>
+  pure(local("a", add(lit(1), lit(20)), add(ref("a"), ref("a"))))
+```
+```typescript
+type context = the<unknown, Record<string, number>>
+type context_empty = the<context, {}>
+type context_get<ctx extends context, name extends string> = the<number,
+  ctx[name]>
+type context_set<ctx extends context, name extends string, val extends number> = the<context,
+  (Omit<ctx, name> & Record<name, val>)>
+
+type expr = the<unknown,
+  | {"tag": "lit", "values": {"value": number}}
+  | {"tag": "ref", "values": {"variable": string}}
+  | {"tag": "add", "values": {"a": expr, "b": expr}}
+  | {"tag": "local", "values": {"variable": string, "value": expr, "next": expr}}
+  | never>
+type lit<value extends number> = the<expr,
+  {"tag": "lit", "values": {"value": value}}>
+type ref<variable extends string> = the<expr,
+  {"tag": "ref", "values": {"variable": variable}}>
+type add<a extends expr, b extends expr> = the<expr,
+  {"tag": "add", "values": {"a": a, "b": b}}>
+type local<variable extends string, value extends expr, next extends expr> = the<expr,
+  {"tag": "local", "values": {"variable": variable, "value": value, "next": next}}>
+
+type eval<ctx extends context, e extends expr> = the<number,
+  e extends lit<infer x> ? x :
+  e extends ref<infer x> ? context_get<ctx, x> :
+  e extends add<infer a, infer b> ? plus<eval<ctx, a>, eval<ctx, b>> :
+  e extends local<infer name, infer value, infer next> ?
+    eval<ctx, value> extends the<number, infer evaled_value> ?
+    context_set<ctx, name, evaled_value> extends the<context, infer new_context> ?
+    eval<new_context, next> : never : never :
+  never>
+
+type pure<e extends expr> = the<number,
+  eval<context_empty, e>>
+
+type a = the<number,
+  pure<local<"a", add<lit<1>, lit<20>>, add<ref<"a">, ref<"a">>>>>
+```
