@@ -38,11 +38,11 @@ name = lexeme $ Name . pack <$> liftA2 (:) letterChar (many (alphaNumChar <|> on
 comma :: Parser ()
 comma = void (symbol ",")
 
-arrayLiteral :: Parser [Expr]
-arrayLiteral = between (symbol "[") (symbol "]") (expression `sepBy` comma)
+array :: Parser Expr
+array = Array <$> between (symbol "[") (symbol "]") (expression `sepBy` comma)
 
-objectLiteral :: Parser [(Text, Expr)]
-objectLiteral = between (symbol "{") (symbol "}") (keyValue `sepBy` comma)
+object :: Parser Expr
+object = Object <$> between (symbol "{") (symbol "}") (keyValue `sepBy` comma)
   where
     keyValue = do
       key <- stringLiteral
@@ -50,16 +50,16 @@ objectLiteral = between (symbol "{") (symbol "}") (keyValue `sepBy` comma)
       value <- expression
       pure (key, value)
 
-app :: Parser (Name, [Expr])
+app :: Parser Expr
 app = do
   function <- name
   arguments <- between (symbol "(") (symbol ")") (expression `sepBy` comma)
-  pure (function, arguments)
+  pure (App function arguments)
 
-universum :: Parser ()
-universum = void (symbol "U")
+universum :: Parser Expr
+universum = U <$ symbol "U"
 
-match :: Parser (Expr, [(Expr, Expr)])
+match :: Parser Expr
 match = do
   keyword "match"
   expr <- expression
@@ -69,33 +69,32 @@ match = do
     symbol "=>"
     val <- expression
     pure (pat, val)
-  pure (expr, cases)
+  pure (Match expr cases)
 
-let_ :: Parser (Name, Expr, Expr)
+let_ :: Parser Expr
 let_ = do
   keyword "let"
   name_ <- name
-  symbol "=>"
-  value <- expression
-  symbol "in"
-  next <- expression
-  pure (name_, value, next)
+  type_ <- symbol ":" *> expression
+  value <- symbol "=>" *> expression
+  next <- symbol "in" *> expression
+  pure (Let name_ value type_ next)
 
-wildrcard :: Parser Name
-wildrcard = char '?' *> name
+wildrcard :: Parser Expr
+wildrcard = Wildcard <$> (char '?' *> name)
 
 expression :: Parser Expr
 expression =
   choice
     [ String <$> stringLiteral,
       Number <$> numberLiteral,
-      Array <$> arrayLiteral,
-      Object <$> objectLiteral,
-      Wildcard <$> wildrcard,
-      uncurry Match <$> match,
-      (\(a, b, c) -> Let a b c) <$> let_,
-      try (U <$ universum),
-      try (uncurry App <$> app),
+      array,
+      object,
+      wildrcard,
+      match,
+      let_,
+      try universum,
+      try app,
       Var <$> name
     ]
 

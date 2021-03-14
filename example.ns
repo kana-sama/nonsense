@@ -27,7 +27,7 @@ def eval(ctx : context, e : expr) : number =>
   | ref(?x) => context-get(ctx, x)
   | add(?a, ?b) => plus(eval(ctx, a), eval(ctx, b))
   | local(?name, ?value, ?next) =>
-      let new-context => context-set(ctx, name, eval(ctx, value))
+      let new-context : context => context-set(ctx, name, eval(ctx, value))
        in eval(new-context, next)
 
 def pure(e : expr) : number =>

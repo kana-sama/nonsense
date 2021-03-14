@@ -28,6 +28,6 @@ data Expr
   | Annotation Expr Expr
   | Wildcard Name
   | Match Expr [(Expr, Expr)]
-  | Let Name Expr Expr
+  | Let Name Expr Expr Expr
   | U
   deriving stock (Show)

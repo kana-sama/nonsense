@@ -25,8 +25,8 @@ transpileExpr (NS.Annotation a b) = typed (Just a) (transpileExpr b)
 transpileExpr (NS.Wildcard name) = TS.Infer (transpileName name)
 transpileExpr (NS.Match e cases) =
   foldr (\(pat, expr) -> TS.Extends (transpileExpr e) (transpileExpr pat) (transpileExpr expr)) TS.Never cases
-transpileExpr (NS.Let name value next) =
-  TS.Extends (transpileExpr value) (TS.Infer (transpileName name)) (transpileExpr next) TS.Never
+transpileExpr (NS.Let name value type_ next) =
+  TS.Extends (transpileExpr value) (typed (Just type_) (TS.Infer (transpileName name))) (transpileExpr next) TS.Never
 transpileExpr NS.U = TS.Unknown
 
 transpileArguments :: NS.Arguments -> Maybe [(TS.Ident, Maybe TS.Expr)]
