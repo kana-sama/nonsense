@@ -121,13 +121,13 @@ expression =
     ]
 
 arguments :: Parser Arguments
-arguments = between (symbol "(") (symbol ")") (argument `sepBy` comma)
+arguments = mconcat <$> between (symbol "(") (symbol ")") (argument `sepBy` comma)
   where
     argument = do
-      argName <- name
+      argNames <- some name
       symbol ":"
       argType <- expression
-      pure (argName, argType)
+      pure [(argName, argType) | argName <- argNames]
 
 definition :: Parser Declaration
 definition = do
