@@ -30,7 +30,7 @@ main =
   getArgs >>= \case
     ["transpile", inputPath] -> do
       decls <- parseAndCheck inputPath
-      let output = TS.pretty $ TS.Module $ foldMap NS.transpileDeclaration decls
+      let output = TS.pretty (NS.transpileModule decls)
       let outputPath = replaceExtensions inputPath "ts"
       writeFile outputPath output
     ["typecheck", inputPath] -> do

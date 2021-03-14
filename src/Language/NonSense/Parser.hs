@@ -150,7 +150,7 @@ inductive = do
   keyword "inductive"
   indName <- name
   indArgs <- option [] arguments
-  indCons <- symbol "=>" *> many constructor
+  indCons <- many constructor
   pure (Inductive indName indArgs indCons)
 
 external :: Parser Declaration
@@ -158,7 +158,7 @@ external = do
   keyword "external"
   extName <- name
   extArgs <- option [] arguments
-  extType <- optional (symbol ":" *> expression)
+  extType <- symbol ":" *> expression
   extBody <- symbol "=>" *> stringLiteral
   pure (External extName extArgs extType extBody)
 

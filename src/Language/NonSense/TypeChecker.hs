@@ -3,7 +3,7 @@
 module Language.NonSense.TypeChecker where
 
 import qualified Data.Generics.Uniplate.Data as Uniplate
-import Language.NonSense.AST
+import Language.NonSense.AST hiding (Type)
 import NSPrelude
 import qualified Prelude (lookup)
 
@@ -202,10 +202,7 @@ checkDeclaration (Inductive name args constructors) = do
   declareDefinitionWithArgs name (snd <$> args) U
   withStackFrame (unName name) do
     for_ constructors (checkConstructor name)
-checkDeclaration (External name args Nothing _body) = do
-  _ <- inferExprWithLocals args U
-  declareDefinitionWithArgs name (snd <$> args) U
-checkDeclaration (External name args (Just type_) _body) = do
+checkDeclaration (External name args type_ _body) = do
   _ <- inferExprWithLocals args U
   declareDefinitionWithArgs name (snd <$> args) type_
 
@@ -216,7 +213,9 @@ defaultContext :: Context
 defaultContext =
   [ ("number", Value U),
     ("string", Value U),
-    ("Record", Function [U, U] U)
+    ("Record", Function [U, U] U),
+    ("the", Function [U, Var "a"] (Var "a")),
+    ("plus", Function [Var "number", Var "number"] (Var "number"))
   ]
 
 check :: [Declaration] -> Maybe (CallStack, TypeCheckError)

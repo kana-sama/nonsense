@@ -10,13 +10,12 @@ encodeName = replace "-" "_" . replace "?" "_qmark"
 transpileName :: NS.Name -> TS.Ident
 transpileName (NS.Name name) = TS.Ident (encodeName name)
 
-typed :: Maybe NS.Expr -> TS.Expr -> TS.Expr
-typed (Just a) b = TS.App "the" [transpileExpr a, b]
-typed Nothing b = b
+typed :: NS.Type -> TS.Expr -> TS.Expr
+typed a b = TS.App "the" [transpileExpr a, b]
 
 transpileLetBinding :: NS.LetBinding -> TS.Expr -> TS.Expr
 transpileLetBinding (NS.LetBinding name type_ value) next =
-  TS.Extends (transpileExpr value) (typed (Just type_) (TS.Infer (transpileName name))) next TS.Never
+  TS.Extends (transpileExpr value) (typed type_ (TS.Infer (transpileName name))) next TS.Never
 
 transpileExpr :: NS.Expr -> TS.Expr
 transpileExpr (NS.Var name) = TS.Var (transpileName name) Nothing
@@ -42,11 +41,11 @@ transpileArgument (name, type_) = (transpileName name, Just (transpileExpr type_
 transpileDeclaration :: NS.Declaration -> [TS.Declaration]
 transpileDeclaration (NS.Definition name args type_ value) =
   pure . TS.TypeDeclaration (transpileName name) (transpileArguments args) $
-    typed (Just type_) (transpileExpr value)
+    typed type_ (transpileExpr value)
 transpileDeclaration (NS.Inductive name args cons) =
   let decl =
         TS.TypeDeclaration (transpileName name) (transpileArguments args) $
-          typed (Just NS.U) $
+          typed NS.U $
             foldr TS.Union TS.Never (transpileConstructor <$> cons)
    in decl : fmap (makeSmartConstructor name) cons
 transpileDeclaration (NS.External name args type_ body) =
@@ -56,7 +55,7 @@ transpileDeclaration (NS.External name args type_ body) =
 makeSmartConstructor :: NS.Name -> NS.Constructor -> TS.Declaration
 makeSmartConstructor typeName (NS.Constructor (NS.Name name) args) =
   TS.TypeDeclaration (TS.Ident name) (transpileArguments args) $
-    typed (Just (NS.Var typeName)) $
+    typed (NS.Var typeName) $
       TS.ObjectLit
         [ ("tag", TS.StringLit name),
           ("values", TS.ObjectLit [(encodeName (NS.unName name), TS.Var (transpileName name) Nothing) | (name, _) <- args])
@@ -68,3 +67,16 @@ transpileConstructor (NS.Constructor (NS.Name name) args) =
     [ ("tag", TS.StringLit name),
       ("values", TS.ObjectLit [(name, transpileExpr value) | (NS.Name name, value) <- args])
     ]
+
+builtin :: [TS.Declaration]
+builtin = [the, plus]
+  where
+    the = TS.TypeDeclaration "the" (Just [("a", Just TS.Unknown), ("b", Just (TS.Var "a" Nothing))]) do
+      TS.Var "b" Nothing
+
+    plusmap = TS.ArrayLit [TS.ArrayLit [TS.NumberLit b | b <- [a .. 50]] | a <- [0 .. 50]]
+    plus = TS.TypeDeclaration "plus" (Just [("a", Just (TS.Var "number" Nothing)), ("b", Just (TS.Var "number" Nothing))]) do
+      TS.Lookup (TS.Lookup plusmap (TS.Var "a" Nothing)) (TS.Var "b" Nothing)
+
+transpileModule :: [NS.Declaration] -> TS.Module
+transpileModule decls = TS.Module (builtin <> foldMap transpileDeclaration decls)

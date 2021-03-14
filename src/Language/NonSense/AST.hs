@@ -6,19 +6,21 @@ newtype Name = Name {unName :: Text}
   deriving stock (Show, Eq, Data)
   deriving newtype (IsString)
 
-type Arguments = [(Name, Expr)]
+type Type = Expr
+
+type Arguments = [(Name, Type)]
 
 data Constructor
   = Constructor Name Arguments
   deriving stock (Show)
 
 data Declaration
-  = Definition Name Arguments Expr Expr
+  = Definition Name Arguments Type Expr
   | Inductive Name Arguments [Constructor]
-  | External Name Arguments (Maybe Expr) Text
+  | External Name Arguments Type Text
   deriving stock (Show)
 
-data LetBinding = LetBinding Name Expr Expr
+data LetBinding = LetBinding Name Type Expr
   deriving stock (Eq, Show, Data)
 
 newtype Wildcard = MkWildcard {unWildcard :: Name}
@@ -35,6 +37,6 @@ data Expr
   | Wildcard Wildcard
   | Match Expr [(Expr, Expr)]
   | Let [LetBinding] Expr
-  | ArrayType Expr
+  | ArrayType Type
   | U
   deriving stock (Eq, Show, Data)
