@@ -93,13 +93,28 @@ type colors = the<rgb[], [
 external bool : U => "boolean"
 external tt : bool => "true"
 external ff : bool => "false"
+
 external not(x : bool) : bool => "x extends true ? false : true"
 def not-ff : bool => not(ff)
+
+def not2(x : bool) : bool
+  match x
+  | tt => ff
+  | ff => tt
+
+def not-tt : bool => not2(tt)
 ```
 ```typescript
 type bool = the<unknown, boolean>
 type tt = the<bool, true>
 type ff = the<bool, false>
+
 type not<x extends bool> = the<bool, x extends true ? false : true>
 type not_ff = the<bool, not<ff>>
+
+type not2<x extends bool> = the<bool,
+  x extends tt ? ff :
+  x extends ff ? tt :
+  never>
+type not_tt = the<bool, not2<tt>>
 ```
