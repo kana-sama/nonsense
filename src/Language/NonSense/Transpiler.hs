@@ -53,19 +53,19 @@ transpileDeclaration (NS.External name args type_ body) =
     typed type_ (TS.External body)
 
 makeSmartConstructor :: NS.Name -> NS.Constructor -> TS.Declaration
-makeSmartConstructor typeName (NS.Constructor (NS.Name name) args) =
-  TS.TypeDeclaration (TS.Ident name) (transpileArguments args) $
+makeSmartConstructor typeName (NS.Constructor name args) =
+  TS.TypeDeclaration (transpileName name) (transpileArguments args) $
     typed (NS.Var typeName) $
       TS.ObjectLit
-        [ ("tag", TS.StringLit name),
-          ("values", TS.ObjectLit [(encodeName (NS.unName name), TS.Var (transpileName name) Nothing) | (name, _) <- args])
+        [ ("tag", TS.StringLit (NS.unName name)),
+          ("values", TS.ObjectLit [(NS.unName name, TS.Var (transpileName name) Nothing) | (name, _) <- args])
         ]
 
 transpileConstructor :: NS.Constructor -> TS.Expr
 transpileConstructor (NS.Constructor (NS.Name name) args) =
   TS.ObjectLit
     [ ("tag", TS.StringLit name),
-      ("values", TS.ObjectLit [(name, transpileExpr value) | (NS.Name name, value) <- args])
+      ("values", TS.ObjectLit [(NS.unName name, transpileExpr value) | (name, value) <- args])
     ]
 
 builtin :: [TS.Declaration]
