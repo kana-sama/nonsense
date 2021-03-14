@@ -25,11 +25,11 @@ transpileExpr (NS.Number x) = TS.NumberLit x
 transpileExpr (NS.String x) = TS.StringLit x
 transpileExpr (NS.Array xs) = TS.ArrayLit (transpileExpr <$> xs)
 transpileExpr (NS.Object kvs) = TS.ObjectLit [(k, transpileExpr v) | (k, v) <- kvs]
-transpileExpr (NS.Annotation a b) = typed (Just a) (transpileExpr b)
-transpileExpr (NS.Wildcard name) = TS.Infer (transpileName name)
+transpileExpr (NS.Wildcard name) = TS.Infer (transpileName (NS.unWildcard name))
 transpileExpr (NS.Match e cases) =
   foldr (\(pat, expr) -> TS.Extends (transpileExpr e) (transpileExpr pat) (transpileExpr expr)) TS.Never cases
 transpileExpr (NS.Let bindings next) = foldr transpileLetBinding (transpileExpr next) bindings
+transpileExpr (NS.ArrayType elem) = TS.ArrayType (transpileExpr elem)
 transpileExpr NS.U = TS.Unknown
 
 transpileArguments :: NS.Arguments -> Maybe [(TS.Ident, Maybe TS.Expr)]

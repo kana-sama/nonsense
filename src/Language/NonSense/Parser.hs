@@ -11,7 +11,7 @@ newtype Parser a = Parser {unParser :: Parsec Void Text a}
   deriving newtype (Functor, Applicative, Monad, Alternative, MonadPlus, MonadParsec Void Text)
 
 keywords :: [Text]
-keywords = ["in", "let", "def", "inductive", "external", "type", "match", "extends", "keyof", "typeof"]
+keywords = ["array", "in", "let", "def", "inductive", "external", "type", "match", "extends", "keyof", "typeof"]
 
 sc :: Parser ()
 sc = L.space space1 (L.skipLineComment "#") empty
@@ -94,7 +94,15 @@ let_ = do
   pure (Let bindings next)
 
 wildrcard :: Parser Expr
-wildrcard = Wildcard <$> (char '?' *> name)
+wildrcard = Wildcard . MkWildcard <$> (char '?' *> name)
+
+arrayType :: Parser Expr
+arrayType = do
+  keyword "array"
+  symbol "("
+  elem <- expression
+  symbol ")"
+  pure (ArrayType elem)
 
 expression :: Parser Expr
 expression =
@@ -106,6 +114,7 @@ expression =
       wildrcard,
       match,
       let_,
+      try arrayType,
       try universum,
       try app,
       Var <$> name

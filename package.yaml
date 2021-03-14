@@ -8,11 +8,11 @@ default-extensions:
   - BlockArguments
   - NoImplicitPrelude
   - LambdaCase
+  - DeriveDataTypeable
 
 dependencies:
   - base >= 4.14.1.0 && < 5
   - text
-  - megaparsec
 
 executables:
   ns-exe:
@@ -25,3 +25,7 @@ executables:
 
 library:
   source-dirs: src
+  dependencies:
+    - megaparsec
+    - mtl
+    - uniplate
