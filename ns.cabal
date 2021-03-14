@@ -1,0 +1,48 @@
+cabal-version: 1.12
+
+-- This file has been generated from package.yaml by hpack version 0.33.0.
+--
+-- see: https://github.com/sol/hpack
+--
+-- hash: 46df52aa1671f578f1cd8644dbd3b7478f69f1ad08908b7d1e57cfbe7b5ab9bd
+
+name:               ns
+version:            0.0.0
+build-type:         Simple
+
+library
+  exposed-modules:
+      Language.NonSense.AST
+      Language.NonSense.Parser
+      Language.NonSense.Transpiler
+      Language.NonSense.TypeChecker
+      Language.TypeScript.AST
+      Language.TypeScript.PrettyPrinter
+      NSPrelude
+  other-modules:
+      Paths_ns
+  hs-source-dirs:
+      src
+  default-extensions: OverloadedStrings GeneralizedNewtypeDeriving DerivingStrategies FlexibleInstances BlockArguments NoImplicitPrelude LambdaCase DeriveDataTypeable
+  build-depends:
+      base >=4.14.1.0 && <5
+    , megaparsec
+    , mtl
+    , text
+    , uniplate
+  default-language: Haskell2010
+
+executable ns-exe
+  main-is: Main.hs
+  other-modules:
+      Paths_ns
+  hs-source-dirs:
+      app
+  default-extensions: OverloadedStrings GeneralizedNewtypeDeriving DerivingStrategies FlexibleInstances BlockArguments NoImplicitPrelude LambdaCase DeriveDataTypeable
+  ghc-options: -Wincomplete-patterns
+  build-depends:
+      base >=4.14.1.0 && <5
+    , filepath
+    , ns
+    , text
+  default-language: Haskell2010
