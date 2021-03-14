@@ -3,19 +3,22 @@ module Language.NonSense.AST where
 import NSPrelude
 
 newtype Name = Name {unName :: Text}
-  deriving stock (Show)
+  deriving stock (Show, Eq)
   deriving newtype (IsString)
 
 type Arguments = [(Name, Expr)]
 
 data Constructor
   = Constructor Name Arguments
-  deriving (Show)
+  deriving stock (Show)
 
 data Declaration
   = Definition Name Arguments Expr Expr
   | Inductive Name Arguments [Constructor]
   | External Name Arguments (Maybe Expr) Text
+  deriving stock (Show)
+
+data LetBinding = LetBinding Name Expr Expr
   deriving stock (Show)
 
 data Expr
@@ -28,6 +31,6 @@ data Expr
   | Annotation Expr Expr
   | Wildcard Name
   | Match Expr [(Expr, Expr)]
-  | Let Name Expr Expr Expr
+  | Let [LetBinding] Expr
   | U
   deriving stock (Show)

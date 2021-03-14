@@ -14,6 +14,10 @@ typed :: Maybe NS.Expr -> TS.Expr -> TS.Expr
 typed (Just a) b = TS.App "the" [transpileExpr a, b]
 typed Nothing b = b
 
+transpileLetBinding :: NS.LetBinding -> TS.Expr -> TS.Expr
+transpileLetBinding (NS.LetBinding name type_ value) next =
+  TS.Extends (transpileExpr value) (typed (Just type_) (TS.Infer (transpileName name))) next TS.Never
+
 transpileExpr :: NS.Expr -> TS.Expr
 transpileExpr (NS.Var name) = TS.Var (transpileName name) Nothing
 transpileExpr (NS.App name args) = TS.Var (transpileName name) (Just (transpileExpr <$> args))
@@ -25,8 +29,7 @@ transpileExpr (NS.Annotation a b) = typed (Just a) (transpileExpr b)
 transpileExpr (NS.Wildcard name) = TS.Infer (transpileName name)
 transpileExpr (NS.Match e cases) =
   foldr (\(pat, expr) -> TS.Extends (transpileExpr e) (transpileExpr pat) (transpileExpr expr)) TS.Never cases
-transpileExpr (NS.Let name value type_ next) =
-  TS.Extends (transpileExpr value) (typed (Just type_) (TS.Infer (transpileName name))) (transpileExpr next) TS.Never
+transpileExpr (NS.Let bindings next) = foldr transpileLetBinding (transpileExpr next) bindings
 transpileExpr NS.U = TS.Unknown
 
 transpileArguments :: NS.Arguments -> Maybe [(TS.Ident, Maybe TS.Expr)]

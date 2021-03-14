@@ -1,5 +1,6 @@
 module Language.NonSense.Parser where
 
+import qualified Data.List.NonEmpty as NonEmpty
 import Language.NonSense.AST
 import NSPrelude hiding (many, some)
 import Text.Megaparsec hiding (match)
@@ -8,6 +9,9 @@ import qualified Text.Megaparsec.Char.Lexer as L
 
 newtype Parser a = Parser {unParser :: Parsec Void Text a}
   deriving newtype (Functor, Applicative, Monad, Alternative, MonadPlus, MonadParsec Void Text)
+
+keywords :: [Text]
+keywords = ["in", "let", "def", "inductive", "external", "type", "match", "extends", "keyof", "typeof"]
 
 sc :: Parser ()
 sc = L.space space1 (L.skipLineComment "#") empty
@@ -33,7 +37,11 @@ keyword :: Text -> Parser Text
 keyword keyword = lexeme (string keyword <* notFollowedBy alphaNumChar)
 
 name :: Parser Name
-name = lexeme $ Name . pack <$> liftA2 (:) letterChar (many (alphaNumChar <|> oneOf ['_', '-', '?']))
+name = try do
+  n <- lexeme $ Name . pack <$> liftA2 (:) letterChar (many (alphaNumChar <|> oneOf ['_', '-', '?']))
+  when (unName n `elem` keywords) do
+    failure (Just (Label (NonEmpty.fromList "name can't be keyword"))) mempty
+  pure n
 
 comma :: Parser ()
 comma = void (symbol ",")
@@ -71,14 +79,19 @@ match = do
     pure (pat, val)
   pure (Match expr cases)
 
-let_ :: Parser Expr
-let_ = do
-  keyword "let"
+letBinding :: Parser LetBinding
+letBinding = do
   name_ <- name
   type_ <- symbol ":" *> expression
   value <- symbol "=>" *> expression
-  next <- symbol "in" *> expression
-  pure (Let name_ value type_ next)
+  pure (LetBinding name_ type_ value)
+
+let_ :: Parser Expr
+let_ = do
+  keyword "let"
+  bindings <- many letBinding
+  next <- keyword "in" *> expression
+  pure (Let bindings next)
 
 wildrcard :: Parser Expr
 wildrcard = Wildcard <$> (char '?' *> name)
