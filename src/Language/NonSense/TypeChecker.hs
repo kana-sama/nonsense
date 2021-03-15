@@ -2,7 +2,6 @@
 
 module Language.NonSense.TypeChecker where
 
-import qualified Data.Text as Text (init)
 import Language.NonSense.AST hiding (Type)
 import NSPrelude
 import qualified Prelude (lookup)
@@ -37,18 +36,26 @@ type Context = [(Name, Type)]
 
 type CallStack = [Text]
 
-data Env = Env {envContext :: Context, envCallStack :: CallStack}
+data Env = Env
+  { envContext :: Context,
+    envMutuals :: [Name],
+    envCallStack :: CallStack
+  }
 
 newtype TC a = TC {runTC :: ReaderT Env (Either (Env, TypeCheckError)) a}
   deriving newtype (Functor, Applicative, Monad)
 
 getContext :: TC Context
-getContext = TC do
-  asks envContext
+getContext = TC (asks envContext)
+
+getMutuals :: TC [Name]
+getMutuals = TC (asks envMutuals)
 
 getCallStack :: TC CallStack
-getCallStack = TC do
-  asks envCallStack
+getCallStack = TC (asks envCallStack)
+
+modifyEnv :: (Env -> Env) -> TC a -> TC a
+modifyEnv f (TC next) = TC (local f next)
 
 fail :: TypeCheckError -> TC a
 fail error = do
@@ -65,9 +72,10 @@ lookup name = do
 checkUndeclared :: Name -> TC ()
 checkUndeclared name = do
   context <- getContext
+  mutuals <- getMutuals
   case Prelude.lookup name context of
-    Just _ -> fail (AlreadyDeclared name)
-    Nothing -> pure ()
+    Just _ | name `notElem` mutuals -> fail (AlreadyDeclared name)
+    _ -> pure ()
 
 lookupForFunction :: Name -> TC ([Expr], Expr)
 lookupForFunction name =
@@ -82,15 +90,28 @@ lookupForValue name =
     _ -> fail (FunctionUsedAsValue name)
 
 withStackFrame :: Text -> TC a -> TC a
-withStackFrame name (TC action) = TC do
-  local (\(Env ctx cs) -> Env ctx (name : cs)) action
+withStackFrame name = modifyEnv \(Env context mutuals callStack) ->
+  Env context mutuals (name : callStack)
 
 withDeclared :: Name -> Type -> TC a -> TC a
-withDeclared name type_ = withExtraContext [(name, type_)]
+withDeclared name type_ = withDeclaredContextItem (name, type_)
 
-withExtraContext :: [(Name, Type)] -> TC a -> TC a
-withExtraContext ctx' (TC action) = TC do
-  local (\(Env ctx cs) -> Env (ctx' <> ctx) cs) action
+withDeclaredContextItem :: (Name, Type) -> TC a -> TC a
+withDeclaredContextItem item = withDeclaredContextItems [item]
+
+withDeclaredContextItems :: [(Name, Type)] -> TC a -> TC a
+withDeclaredContextItems newContext = modifyEnv \(Env context mutuals callStack) ->
+  let -- do not declare names, that are already declared as mutual
+      newContextWithoutMutuals = filter (\(name, _) -> name `notElem` mutuals) newContext
+      -- remove new names from mutual list
+      mutualsWithoutNewContext = filter (`notElem` (fst <$> newContext)) mutuals
+   in Env (reverse newContextWithoutMutuals <> context) mutualsWithoutNewContext callStack
+  where
+    sameName (name1, _) (name2, _) = name1 == name2
+
+withMutualDeclarations :: [Name] -> TC a -> TC a
+withMutualDeclarations newMutuals = modifyEnv \(Env context mutuals callStack) ->
+  Env context (newMutuals <> mutuals) callStack
 
 checkExprIs :: Type -> Expr -> TC ()
 checkExprIs type_ expr = do
@@ -285,43 +306,61 @@ makeContextItem :: Name -> Arguments -> Expr -> (Name, Type)
 makeContextItem name [] type_ = (name, Value type_)
 makeContextItem name args type_ = (name, Function (snd <$> args) type_)
 
-checkDeclaration :: Declaration -> TC [(Name, Type)]
-checkDeclaration (Definition name args type_ body) = do
-  let contextItem = makeContextItem name args type_
+getContextItems :: Declaration -> [(Name, Type)]
+getContextItems (Definition name args type_ _) = [makeContextItem name args type_]
+getContextItems (Inductive name args constructors) = makeContextItem name args Top : constructorItems
+  where
+    constructorItems = do
+      Constructor conName conArgs <- constructors
+      pure (makeContextItem conName conArgs (Var name))
+getContextItems (External name args type_ _) = [makeContextItem name args type_]
+getContextItems (Declare name args type_) = [makeContextItem name args type_]
+-- ignore nested declarations
+getContextItems (Mutual declarations) = []
+
+checkDeclaration :: Declaration -> TC a -> TC a
+checkDeclaration decl@(Definition name args type_ body) next = do
+  let [contextItem] = getContextItems decl
   checkUndeclared name
   withStackFrame (unName name) do
     withArguments args do
-      withDeclared name (snd contextItem) do
+      withDeclaredContextItem contextItem do
         checkExprIs (Value type_) body
-  pure [contextItem]
-checkDeclaration (Inductive name args constructors) = do
-  let contextItem = makeContextItem name args Top
+  withDeclaredContextItem contextItem next
+checkDeclaration decl@(Inductive name args constructors) next = do
+  let contextItem : constructorItems = getContextItems decl
   checkUndeclared name
   withStackFrame (unName name) do
     withArguments args do
-      withDeclared name (snd contextItem) do
+      withDeclaredContextItem contextItem do
         for_ constructors \(Constructor name args) -> do
           checkUndeclared name
           withArguments args (pure ())
-  let constructorItems = fmap (\(Constructor conName conArgs) -> makeContextItem conName conArgs (Var name)) constructors
-  pure (contextItem : constructorItems)
-checkDeclaration (External name args type_ _) = do
+  withDeclaredContextItems (contextItem : constructorItems) next
+checkDeclaration decl@(External name args type_ _) next = do
   checkUndeclared name
   withStackFrame (unName name) do
     withArguments args (pure ())
-  pure [makeContextItem name args type_]
-checkDeclaration (Declare name args type_) = do
+  withDeclaredContextItems (getContextItems decl) next
+checkDeclaration decl@(Declare name args type_) next = do
   checkUndeclared name
   withStackFrame (unName name) do
     withArguments args (pure ())
-  pure [makeContextItem name args type_]
+  withDeclaredContextItems (getContextItems decl) next
+checkDeclaration decl@(Mutual declarations) next = do
+  let contextItems = foldMap getContextItems declarations
+  for contextItems \(name, _) -> do
+    checkUndeclared name
+  withDeclaredContextItems contextItems do
+    withMutualDeclarations (fst <$> contextItems) do
+      checkDeclarations declarations (pure ())
+    next
 
-checkModule :: [Declaration] -> TC ()
-checkModule [] = pure ()
-checkModule (decl : decls) = do
-  newContext <- checkDeclaration decl
-  withExtraContext newContext do
-    checkModule decls
+checkDeclarations :: [Declaration] -> TC a -> TC a
+checkDeclarations [] next = next
+checkDeclarations (decl : decls) next = do
+  checkDeclaration decl do
+    checkDeclarations decls next
 
 defaultContext :: Context
 defaultContext =
@@ -335,18 +374,26 @@ defaultContext =
 
 check :: [Declaration] -> Maybe (Env, TypeCheckError)
 check decls =
-  case runReaderT (runTC (checkModule decls)) (Env defaultContext []) of
+  case runReaderT (runTC (checkDeclarations decls (pure ()))) (Env defaultContext [] []) of
     Right () -> Nothing
     Left err -> Just err
 
 printCallStack :: CallStack -> Text
-printCallStack stack = unlines ("Callstack: " : fmap (\x -> "- " <> show x) stack)
+printCallStack stack = unlines ("\nCallstack: " : fmap (\x -> "- " <> show x) stack)
 
 printContext :: Context -> Text
-printContext context = "Context: " <> show context
+printContext context = "\nContext: " <> show context
+
+printMutuals :: [Name] -> Text
+printMutuals mutuals = "\nMutuals: " <> show mutuals
 
 printEnv :: Env -> Text
-printEnv (Env context callStack) = printCallStack callStack <> printContext context
+printEnv (Env context mutuals callStack) =
+  mconcat
+    [ printCallStack callStack,
+      printMutuals mutuals,
+      printContext context
+    ]
 
 printError :: TypeCheckError -> Text
 printError err = "TypeCheckError: " <> show err

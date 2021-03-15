@@ -19,6 +19,8 @@ keywords =
     "def",
     "inductive",
     "external",
+    "declare",
+    "mutual",
     "type",
     "match",
     "with",
@@ -210,8 +212,13 @@ declare = do
   (name_, args_, type_) <- commonDeclaretion "declare"
   pure (Declare name_ args_ type_)
 
+mutual :: Parser Declaration
+mutual = do
+  keyword "mutual"
+  Mutual <$> declaration `manyTill` keyword "end"
+
 declaration :: Parser Declaration
-declaration = definition <|> inductive <|> external <|> declare
+declaration = definition <|> inductive <|> external <|> declare <|> mutual
 
 module_ :: Parser [Declaration]
 module_ = many declaration

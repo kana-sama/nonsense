@@ -61,6 +61,8 @@ transpileDeclaration (NS.External name args type_ body) =
   pure . TS.TypeDeclaration (transpileName name) (transpileArguments args) $
     typed type_ (TS.External body)
 transpileDeclaration (NS.Declare _ _ _) = []
+transpileDeclaration (NS.Mutual declarations) =
+  foldMap transpileDeclaration declarations
 
 makeSmartConstructor :: NS.Name -> NS.Constructor -> TS.Declaration
 makeSmartConstructor typeName (NS.Constructor name args) =

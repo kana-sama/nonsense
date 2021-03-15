@@ -21,6 +21,7 @@ data Declaration
   | Inductive Name Arguments [Constructor]
   | External Name Arguments Type Text
   | Declare Name Arguments Type
+  | Mutual [Declaration]
   deriving stock (Show)
 
 data LetBinding = LetBinding Name Type Expr
