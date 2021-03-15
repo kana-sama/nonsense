@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 46df52aa1671f578f1cd8644dbd3b7478f69f1ad08908b7d1e57cfbe7b5ab9bd
+-- hash: c33615b9c3cb80616665e16e8f7425f7b93916f16d68f495717be23a6dbda8ea
 
 name:               ns
 version:            0.0.0
@@ -24,6 +24,7 @@ library
   hs-source-dirs:
       src
   default-extensions: OverloadedStrings GeneralizedNewtypeDeriving DerivingStrategies FlexibleInstances BlockArguments NoImplicitPrelude LambdaCase DeriveDataTypeable
+  ghc-options: -Wincomplete-patterns
   build-depends:
       base >=4.14.1.0 && <5
     , megaparsec

@@ -3,8 +3,8 @@ module Language.NonSense.AST where
 import NSPrelude
 
 newtype Name = Name {unName :: Text}
-  deriving stock (Show, Eq, Data)
-  deriving newtype (IsString)
+  deriving stock (Eq)
+  deriving newtype (IsString, Show)
 
 type Type = Expr
 
@@ -18,14 +18,11 @@ data Declaration
   = Definition Name Arguments Type Expr
   | Inductive Name Arguments [Constructor]
   | External Name Arguments Type Text
+  | Declare Name Arguments Type
   deriving stock (Show)
 
 data LetBinding = LetBinding Name Type Expr
-  deriving stock (Eq, Show, Data)
-
-newtype Wildcard = MkWildcard {unWildcard :: Name}
-  deriving stock (Show, Eq, Data)
-  deriving newtype (IsString)
+  deriving stock (Eq, Show)
 
 data Expr
   = Var Name
@@ -33,10 +30,13 @@ data Expr
   | Number Int
   | String Text
   | Array [Expr]
+  | ArrayType Type
+  | Tuple [Expr]
+  | TupleType [Type]
   | Object [(Text, Expr)]
-  | Wildcard Wildcard
+  | Wildcard Name
   | Match Expr [(Expr, Expr)]
   | Let [LetBinding] Expr
-  | ArrayType Type
-  | U
-  deriving stock (Eq, Show, Data)
+  | Top
+  | Bottom
+  deriving stock (Eq, Show)

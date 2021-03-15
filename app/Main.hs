@@ -18,8 +18,9 @@ parseAndCheck inputPath = do
     Right decls -> do
       case NS.check decls of
         Nothing -> pure decls
-        Just err -> do
-          print err
+        Just (env, err) -> do
+          putStrLn (NS.printError err)
+          putStrLn (NS.printEnv env)
           exitFailure
     Left err -> do
       putStrLn err

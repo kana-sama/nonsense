@@ -23,13 +23,16 @@ transpileExpr (NS.App name args) = TS.Var (transpileName name) (Just (transpileE
 transpileExpr (NS.Number x) = TS.NumberLit x
 transpileExpr (NS.String x) = TS.StringLit x
 transpileExpr (NS.Array xs) = TS.ArrayLit (transpileExpr <$> xs)
+transpileExpr (NS.ArrayType elem) = TS.ArrayType (transpileExpr elem)
+transpileExpr (NS.Tuple xs) = TS.ArrayLit (transpileExpr <$> xs)
+transpileExpr (NS.TupleType xs) = TS.ArrayLit (transpileExpr <$> xs)
 transpileExpr (NS.Object kvs) = TS.ObjectLit [(k, transpileExpr v) | (k, v) <- kvs]
-transpileExpr (NS.Wildcard name) = TS.Infer (transpileName (NS.unWildcard name))
+transpileExpr (NS.Wildcard name) = TS.Infer (transpileName name)
 transpileExpr (NS.Match e cases) =
   foldr (\(pat, expr) -> TS.Extends (transpileExpr e) (transpileExpr pat) (transpileExpr expr)) TS.Never cases
 transpileExpr (NS.Let bindings next) = foldr transpileLetBinding (transpileExpr next) bindings
-transpileExpr (NS.ArrayType elem) = TS.ArrayType (transpileExpr elem)
-transpileExpr NS.U = TS.Unknown
+transpileExpr NS.Top = TS.Unknown
+transpileExpr NS.Bottom = TS.Never
 
 transpileArguments :: NS.Arguments -> Maybe [(TS.Ident, Maybe TS.Expr)]
 transpileArguments [] = Nothing
@@ -45,12 +48,13 @@ transpileDeclaration (NS.Definition name args type_ value) =
 transpileDeclaration (NS.Inductive name args cons) =
   let decl =
         TS.TypeDeclaration (transpileName name) (transpileArguments args) $
-          typed NS.U $
+          typed NS.Top $
             foldr TS.Union TS.Never (transpileConstructor <$> cons)
    in decl : fmap (makeSmartConstructor name) cons
 transpileDeclaration (NS.External name args type_ body) =
   pure . TS.TypeDeclaration (transpileName name) (transpileArguments args) $
     typed type_ (TS.External body)
+transpileDeclaration (NS.Declare _ _ _) = []
 
 makeSmartConstructor :: NS.Name -> NS.Constructor -> TS.Declaration
 makeSmartConstructor typeName (NS.Constructor name args) =

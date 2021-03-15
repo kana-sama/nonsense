@@ -2,7 +2,7 @@
 
 module Language.NonSense.TypeChecker where
 
-import qualified Data.Generics.Uniplate.Data as Uniplate
+import qualified Data.Text as Text (init)
 import Language.NonSense.AST hiding (Type)
 import NSPrelude
 import qualified Prelude (lookup)
@@ -16,14 +16,16 @@ newtype Actual a = Actual a
 data TypeCheckError
   = UnknownVariable Name
   | InvalidArgumentTypeFor Name (Expected [Expr]) (Actual [Expr])
+  | AlreadyDeclared Name
   | FunctionUsedAsValue Name
   | ValueUsedAsFunction Name
-  | InvalidTypeFor Name (Expected Expr) (Actual Expr)
-  | InvalidPatternsType (Expected Expr) (Actual Expr)
-  | InvalidBranchesTypes (Actual [Expr])
-  | AlreadyDeclared Name
-  | TypeIsNotTypeFor Name (Actual Expr)
-  | InvalidArgumentsCounts Name (Expected Int) (Actual Int)
+  | InvalidArrayElementsTypes (Actual [Expr])
+  | FailToInferTypeOfWildCard Name
+  | InvalidTypeFor Expr (Actual Type) (Expected Type)
+  --  | InvalidPatternsType (Expected Expr) (Actual Expr)
+  --  | InvalidBranchesTypes (Actual [Expr])
+  --  | TypeIsNotTypeFor Name (Actual Expr)
+  --  | InvalidArgumentsCounts Name (Expected Int) (Actual Int)
   deriving stock (Show)
 
 data Type
@@ -35,19 +37,23 @@ type Context = [(Name, Type)]
 
 type CallStack = [Text]
 
-newtype TC a = TC {runTC :: StateT (Context, CallStack) (Either (CallStack, TypeCheckError)) a}
+data Env = Env {envContext :: Context, envCallStack :: CallStack}
+
+newtype TC a = TC {runTC :: ReaderT Env (Either (Env, TypeCheckError)) a}
   deriving newtype (Functor, Applicative, Monad)
 
 getContext :: TC Context
-getContext = TC (gets fst)
+getContext = TC do
+  asks envContext
 
 getCallStack :: TC CallStack
-getCallStack = TC (gets snd)
+getCallStack = TC do
+  asks envCallStack
 
 fail :: TypeCheckError -> TC a
 fail error = do
-  callStack <- getCallStack
-  TC (lift (Left (callStack, error)))
+  env <- TC ask
+  TC (lift (Left (env, error)))
 
 lookup :: Name -> TC Type
 lookup name = do
@@ -75,151 +81,224 @@ lookupForValue name =
     Value type_ -> pure type_
     _ -> fail (FunctionUsedAsValue name)
 
-addStackFrame :: Text -> TC ()
-addStackFrame name = TC (modify \(ctx, cs) -> (ctx, name : cs))
-
-removeStackFrame :: TC ()
-removeStackFrame = TC (modify \(ctx, cs) -> (ctx, tail cs))
-
 withStackFrame :: Text -> TC a -> TC a
-withStackFrame name action = do
-  addStackFrame name
-  result <- action
-  removeStackFrame
-  pure result
+withStackFrame name (TC action) = TC do
+  local (\(Env ctx cs) -> Env ctx (name : cs)) action
 
-declare :: Name -> Type -> TC ()
-declare name type_ = TC (modify \(ctx, cs) -> ((name, type_) : ctx, cs))
+withDeclared :: Name -> Type -> TC a -> TC a
+withDeclared name type_ = withExtraContext [(name, type_)]
 
-undeclareLast :: TC ()
-undeclareLast = TC (modify \(ctx, cs) -> (tail ctx, cs))
+withExtraContext :: [(Name, Type)] -> TC a -> TC a
+withExtraContext ctx' (TC action) = TC do
+  local (\(Env ctx cs) -> Env (ctx' <> ctx) cs) action
 
-declareGlobal :: Name -> Type -> TC ()
-declareGlobal name type_ = do
-  checkUndeclared name
-  declare name type_
+checkExpr :: Expr -> Type -> TC ()
+checkExpr expr type_ = do
+  actualType <- inferExpr expr
+  unless (Value actualType == type_) do
+    fail (InvalidTypeFor expr (Actual (Value actualType)) (Expected type_))
 
-declareLocals :: [(Name, Type)] -> TC a -> TC a
-declareLocals binds action = do
-  for binds \(name, type_) -> declare name type_
-  result <- action
-  for binds \_ -> undeclareLast
-  pure result
+withPatternOf :: Type -> Expr -> TC a -> TC a
+withPatternOf valueType pat next = do
+  case (pat, valueType) of
+    (Wildcard name, _) ->
+      withDeclared name valueType next
+    (App name args, _) -> do
+      (argsTypes, resultType) <- lookupForFunction name
+      unless (valueType == Value resultType) do
+        fail (InvalidTypeFor pat (Actual (Value resultType)) (Expected valueType))
+      unless (length args == length argsTypes) do
+        fail (InvalidArgumentTypeFor name (Expected argsTypes) (Actual args))
+      traverseProduct (zip args (Value <$> argsTypes)) next
+    (Tuple args, Value (TupleType argsTypes)) ->
+      traverseProduct (zip args (Value <$> argsTypes)) next
+    _ -> do
+      checkExpr pat valueType
+      next
+  where
+    traverseProduct [] next = next
+    traverseProduct ((arg, expectedArgType) : args) next = do
+      withPatternOf expectedArgType arg do
+        traverseProduct args next
 
-declareLocal :: Name -> Type -> TC a -> TC a
-declareLocal name type_ = declareLocals [(name, type_)]
+withArguments :: Arguments -> TC a -> TC a
+withArguments [] next = next
+withArguments ((name_, type_) : args) next = do
+  checkExpr type_ (Value Top)
+  withDeclared name_ (Value type_) do
+    withArguments args next
 
-declareDefinitionWithArgs :: Name -> [Expr] -> Expr -> TC ()
-declareDefinitionWithArgs name [] type_ =
-  declareGlobal name (Value type_)
-declareDefinitionWithArgs name args type_ =
-  declareGlobal name (Function args type_)
-
-allSame :: Eq a => [a] -> Bool
-allSame [] = True
-allSame (x : xs) = all (== x) xs
-
-checkSameType :: TypeCheckError -> [Expr] -> TC Expr
-checkSameType err [] = pure U
-checkSameType err (type_ : types) = do
-  unless (all (== type_) types) do
-    fail err
-  pure type_
-
-checkLetBinding :: LetBinding -> TC ()
-checkLetBinding (LetBinding name type_ value) = do
-  valueType <- inferExpr value
-  unless (valueType == type_) do
-    fail (InvalidTypeFor name (Expected type_) (Actual valueType))
-
+-- a, b - expression
+-- x, f - reference
+-- n    - number
+-- s    - string
+-- t    - type
 inferExpr :: Expr -> TC Expr
-inferExpr (Var name) = lookupForValue name
+--
+--  x : t ∈ Г
+--  ─────────
+--  Г ⊢ x : t
+inferExpr (Var x) = lookupForValue x
+--
+--  (t₁, …, tᵤ) → t ∈ Г; Г ⊢ a₁ : t₁, …, aᵤ : tᵤ
+--  ────────────────────────────────────────────
+--              Г ⊢ f(a₁, …, aᵤ) : t
 inferExpr (App fun args) = do
-  argTypes <- for args inferExpr
   (formalArgsTypes, resultType) <- lookupForFunction fun
-  unless (formalArgsTypes == argTypes) do
-    fail (InvalidArgumentTypeFor fun (Expected formalArgsTypes) (Actual argTypes))
+  actualArgsTypes <- for args inferExpr
+  unless (formalArgsTypes == actualArgsTypes) do
+    fail (InvalidArgumentTypeFor fun (Expected formalArgsTypes) (Actual actualArgsTypes))
   pure resultType
+--
+--  ──────────
+--  n : number
 inferExpr (Number _) = pure (Var "number")
+--
+--  ──────────
+--  s : number
 inferExpr (String _) = pure (Var "string")
-inferExpr (Array []) = pure U
+--
+--  ─────────────
+--  [] : array(⊤)
+inferExpr (Array []) = pure Top
+--
+--    Г ⊢ a₁ : t, …, aᵤ : t
+--  ──────────────────────────
+--  Г ⊢ [a₁, …, aᵤ] : array(t)
 inferExpr (Array elems) = do
   elemTypes <- for elems inferExpr
-  if allSame elemTypes
-    then pure (ArrayType (head elemTypes))
-    else pure (Array elemTypes)
-inferExpr (Object _) = pure U
-inferExpr (Wildcard _) = pure U
-inferExpr (Match value cases) = do
-  valueType <- inferExpr value
-  branchTypes <- for cases \(pat, branch) -> do
-    case pat of
-      -- TODO: bullstit
-      App conName conArgs -> do
-        let wildcards = unWildcard <$> Uniplate.universeBi @_ @Wildcard conArgs
-        (formalArgs, formalType) <- lookupForFunction conName
-        unless (length wildcards == length formalArgs) do
-          fail (InvalidArgumentsCounts conName (Expected (length formalArgs)) (Actual (length wildcards)))
-        unless (formalType == valueType) do
-          fail (InvalidPatternsType (Expected valueType) (Actual formalType))
-        declareLocals (zip wildcards (Value <$> formalArgs)) (inferExpr branch)
-      _ -> inferExpr branch
-  checkSameType (InvalidBranchesTypes (Actual branchTypes)) branchTypes
-inferExpr (Let bindings next) = go bindings
-  where
-    go [] = inferExpr next
-    go (binding : bindings) = do
-      checkLetBinding binding
-      let LetBinding name type_ _ = binding
-      declareLocal name (Value type_) (go bindings)
-inferExpr U = pure U
+  unless (all (== head elemTypes) elemTypes) do
+    fail (InvalidArrayElementsTypes (Actual elemTypes))
+  pure (ArrayType (head elemTypes))
+--
+--     Г ⊢ t : ⊤
+--  ────────────────
+--  Г ⊢ array(t) : ⊤
+inferExpr (ArrayType elemType) = do
+  elemTypeType <- inferExpr elemType
+  checkExpr elemTypeType (Value Top)
+  pure Top
+--
+--       Г ⊢ a₁ : t₁, …, aᵤ : tᵤ
+--  ──────────────────────────────────
+--  Г ⊢ (a₁, …, aᵤ) : tuple(t₁, …, tᵤ)
+inferExpr (Tuple elems) = TupleType <$> for elems inferExpr
+--
+--   Г ⊢ t₁ : ⊤, …, tᵤ : ⊤
+--  ─────────────────────────
+--  Г ⊢ tuple(t₁, …, tᵤ) : ⊤
+inferExpr (TupleType elemsTypes) = do
+  for elemsTypes \elemType -> do
+    checkExpr elemType (Value Top)
+  pure Top
+--
+-- TODO: object type
+--
+--  ─────────
+--  {...} : ⊤
+inferExpr (Object _) = pure Top
+inferExpr (Wildcard name) = fail (FailToInferTypeOfWildCard name)
+--
+--  ───────────────────────
+--  Г ⊢ match a with {} : ⊥
+inferExpr (Match a []) = pure Bottom
+--
+--   Г ⊢ a : t₁; ∀i, Г, wildcars(pᵢ) ⊢ pᵢ : t₁, bᵢ : t₂
+--  ────────────────────────────────────────────────────
+--     Г ⊢ match a with {p₁ => b₁, …, pᵤ => bᵤ} : t₂
+inferExpr (Match a cases) = do
+  withStackFrame ("match: " <> show a) do
+    t1 <- inferExpr a
+    valuesTypes <- for cases \(pat, value) -> do
+      withStackFrame ("pattern: " <> show pat) do
+        withPatternOf (Value t1) pat (inferExpr value)
+    unless (all (== head valuesTypes) valuesTypes) do
+      fail (InvalidArrayElementsTypes (Actual valuesTypes))
+    pure (head valuesTypes)
+--
+--     Г ⊢ x : t
+--  ────────────────
+--  Г ⊢ let in x : t
+inferExpr (Let [] next) = inferExpr next
+--
+--  Г ⊢ t₁ : ⊤, x : t₁;  Г, a : t₁ ⊢ let as in b : t₂
+--  ──────────────────────────────────────────────────
+--           Г ⊢ let x : t₁ = a, as in b : t₂
+inferExpr (Let ((LetBinding name type_ value) : bindings) next) = do
+  withStackFrame (unName name) do
+    checkExpr type_ (Value Top)
+    checkExpr value (Value type_)
+    withDeclared name (Value type_) do
+      inferExpr (Let bindings next)
+--
+--  ──────
+--  ⊤ : ⊤
+inferExpr Top = pure Top
+--
+--  ──────
+--  ⊥ : ⊤
+inferExpr Bottom = pure Top
 
-checkExpr :: Expr -> TC ()
-checkExpr = void . inferExpr
+makeContextItem :: Name -> Arguments -> Expr -> (Name, Type)
+makeContextItem name [] type_ = (name, Value type_)
+makeContextItem name args type_ = (name, Function (snd <$> args) type_)
 
-checkConstructor :: Name -> Constructor -> TC ()
-checkConstructor typeName (Constructor name args) = do
-  _ <- inferExprWithLocals args U
-  case args of
-    [] -> declareGlobal name (Value (Var typeName))
-    _ -> declareGlobal name (Function (snd <$> args) (Var typeName))
-
-inferExprWithLocals :: [(Name, Expr)] -> Expr -> TC Expr
-inferExprWithLocals [] expr = inferExpr expr
-inferExprWithLocals ((name, type_) : binds) expr = do
-  typeType <- inferExpr type_
-  unless (typeType == U) do fail (TypeIsNotTypeFor name (Actual typeType))
-  declareLocal name (Value type_) (inferExprWithLocals binds expr)
-
-checkDeclaration :: Declaration -> TC ()
+checkDeclaration :: Declaration -> TC [(Name, Type)]
 checkDeclaration (Definition name args type_ body) = do
-  declareDefinitionWithArgs name (snd <$> args) type_
+  let contextItem = makeContextItem name args type_
   withStackFrame (unName name) do
-    bodyType <- (inferExprWithLocals args body)
-    unless (bodyType == type_) do
-      fail (InvalidTypeFor name (Expected type_) (Actual bodyType))
+    withArguments args do
+      withDeclared name (snd contextItem) do
+        checkExpr body (Value type_)
+  pure [contextItem]
 checkDeclaration (Inductive name args constructors) = do
-  declareDefinitionWithArgs name (snd <$> args) U
+  let contextItem = makeContextItem name args Top
   withStackFrame (unName name) do
-    for_ constructors (checkConstructor name)
-checkDeclaration (External name args type_ _body) = do
-  _ <- inferExprWithLocals args U
-  declareDefinitionWithArgs name (snd <$> args) type_
+    withArguments args do
+      withDeclared name (snd contextItem) do
+        for_ constructors \(Constructor name args) -> do
+          withArguments args (pure ())
+  let constructorItems = fmap (\(Constructor conName conArgs) -> makeContextItem conName conArgs (Var name)) constructors
+  pure (contextItem : constructorItems)
+checkDeclaration (External name args type_ _) = do
+  withStackFrame (unName name) do
+    withArguments args (pure ())
+  pure [makeContextItem name args type_]
+checkDeclaration (Declare name args type_) = do
+  withStackFrame (unName name) do
+    withArguments args (pure ())
+  pure [makeContextItem name args type_]
 
 checkModule :: [Declaration] -> TC ()
-checkModule decls = for_ decls checkDeclaration
+checkModule [] = pure ()
+checkModule (decl : decls) = do
+  newContext <- checkDeclaration decl
+  withExtraContext newContext do
+    checkModule decls
 
 defaultContext :: Context
 defaultContext =
-  [ ("number", Value U),
-    ("string", Value U),
-    ("Record", Function [U, U] U),
-    ("the", Function [U, Var "a"] (Var "a")),
+  [ ("number", Value Top),
+    ("string", Value Top),
+    ("Record", Function [Top, Top] Top),
+    ("the", Function [Top, Var "a"] (Var "a")),
     ("plus", Function [Var "number", Var "number"] (Var "number"))
   ]
 
-check :: [Declaration] -> Maybe (CallStack, TypeCheckError)
+check :: [Declaration] -> Maybe (Env, TypeCheckError)
 check decls =
-  case evalStateT (runTC (checkModule decls)) (defaultContext, []) of
+  case runReaderT (runTC (checkModule decls)) (Env defaultContext []) of
     Right () -> Nothing
     Left err -> Just err
+
+printCallStack :: CallStack -> Text
+printCallStack stack = unlines ("Callstack: " : fmap (\x -> "- " <> show x) stack)
+
+printContext :: Context -> Text
+printContext context = "Context: " <> show context
+
+printEnv :: Env -> Text
+printEnv (Env context callStack) = printCallStack callStack <> printContext context
+
+printError :: TypeCheckError -> Text
+printError err = "TypeCheckError: " <> show err

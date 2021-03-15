@@ -1,10 +1,10 @@
-def context : U => Record(string, number)
+def context : top => Record(string, number)
 external context-empty : context => "{}"
 external context-get(ctx : context, name : string) : number => "ctx[name]"
 external context-set(ctx : context, name : string, val : number) : context =>
   "(Omit<ctx, name> & Record<name, val>)"
 
-inductive expr
+inductive expr : top =>
 | lit(value : number)
 | ref(variable : string)
 | add(a b : expr)

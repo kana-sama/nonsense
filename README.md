@@ -7,6 +7,7 @@ cabal run ns-exe typecheck example.ns
 ## roadmap:
 - [x] typecheker
 - [ ] typecheker with subtyping
+- [ ] polymorphism
 - [ ] pattern matching validation
 - [ ] string manipulations and interpolation
 - [ ] do-notation
@@ -42,10 +43,10 @@ type answer_with_let_qmark = the<number,
 
 ### inductive types and matching
 ```lean
-inductive rgb
+inductive rgb : top =>
 | mk-rgb(r g b : number)
 
-inductive color
+inductive color : top =>
 | red
 | green
 | blue
@@ -96,9 +97,49 @@ type colors = the<rgb[], [
 ]>
 ```
 
-### externals
 ```lean
-external bool : U => "boolean"
+inductive tree : top =>
+| leaf(n : number)
+| node(l r : tree)
+
+def sum (x : tree) : number =>
+  match x with
+  | leaf(5) => 0
+  | leaf(?x) => x
+  | node(leaf(?a), leaf(?b)) => plus(10, plus(a, b))
+  | node(?l, ?r) => plus(sum(l), sum(r))
+
+def q : number => sum(
+  node(node(node(leaf(1), leaf(2)), node(leaf(3), leaf(4))), leaf(5))
+)
+```
+```typescript
+type tree = the<unknown,
+  | {"tag": "leaf", "values": {"n": number}}
+  | {"tag": "node", "values": {"l": tree, "r": tree}}
+  | never>
+type leaf<n extends number> = the<tree, {"tag": "leaf", "values": {"n": n}}>
+type node<l extends tree, r extends tree> = the<tree, {"tag": "node", "values": {"l": l, "r": r}}>
+
+type sum<x extends tree> = the<number,
+  x extends leaf<5> ? 1 :
+  x extends leaf<infer x> ? x :
+  x extends node<leaf<infer a>, leaf<infer b>> ?
+    plus<10, plus<a, b>> :
+  x extends node<infer l, infer r> ?
+    plus<sum<l>, sum<r>>
+  : never>
+
+type q = the<number,
+  sum<node<
+    node<node<leaf<1>, leaf<2>>,
+    node<leaf<3>, leaf<4>>
+  >, leaf<5>>>>
+```
+
+### externals and declares
+```lean
+external bool : top => "boolean"
 external tt : bool => "true"
 external ff : bool => "false"
 
@@ -127,16 +168,38 @@ type not2<x extends bool> = the<bool,
 type not_tt = the<bool, not2<tt>>
 ```
 
+```lean
+declare boolean : top
+declare true : boolean
+declare false : boolean 
+
+def not(x : boolean) : boolean =>
+  match x with
+  | true => false
+  | ?other => true
+
+def not-not-not-true : boolean =>
+  not(not(not(true)))
+```
+```typescript
+type not<x extends boolean> = the<boolean,
+  x extends true ? false :
+  x extends infer other ? true :
+  never>
+
+type not_not_not_true = the<boolean,
+  not<not<not<true>>>>
+```
 
 ### simple expression language
 ```lean
-def context : U => Record(string, number)
+def context : top => Record(string, number)
 external context-empty : context => "{}"
 external context-get(ctx : context, name : string) : number => "ctx[name]"
 external context-set(ctx : context, name : string, val : number) : context =>
   "(Omit<ctx, name> & Record<name, val>)"
 
-inductive expr
+inductive expr : top =>
 | lit(value : number)
 | ref(variable : string)
 | add(a b : expr)
