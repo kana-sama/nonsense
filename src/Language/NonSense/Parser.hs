@@ -14,14 +14,15 @@ keywords :: [Text]
 keywords =
   [ "array",
     "tuple",
-    "in",
     "let",
+    "in",
     "def",
     "inductive",
     "external",
     "type",
     "match",
     "with",
+    "end",
     "extends",
     "keyof",
     "typeof",
@@ -115,7 +116,7 @@ match = do
   keyword "match"
   expr <- expression
   keyword "with"
-  cases <- many do
+  cases <- flip manyTill (keyword "end") do
     symbol "|"
     pat <- expression
     symbol "=>"

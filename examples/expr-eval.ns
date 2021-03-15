@@ -19,6 +19,7 @@ def eval(ctx : context, e : expr) : number =>
       let evaled-value : number => eval(ctx, value)
           new-context : context => context-set(ctx, name, evaled-value)
        in eval(new-context, next)
+  end
 
 def pure(e : expr) : number =>
   eval(context-empty, e)

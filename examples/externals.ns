@@ -9,6 +9,7 @@ def not-2(x : bool) : bool =>
   match x with
   | tt => ff
   | ff => tt
+  end
 
 def not-ff : bool => not-1(ff)
 def not-tt : bool => not-2(tt)
