@@ -20,7 +20,7 @@ instance Pretty Expr where
     where
       prettyElem (Left lit) = lit
       prettyElem (Right expr) = "${" <> pretty expr <> "}"
-  pretty (Infer var) = "infer " <> pretty var
+  pretty (Infer var) = "(infer " <> pretty var <> ")"
   pretty (Extends a b then_ else_) = pretty a <> " extends " <> pretty b <> " ? " <> pretty then_ <> " : " <> pretty else_
   pretty (Union a b) = pretty a <> " | " <> pretty b
   pretty (Intersection a b) = pretty a <> " & " <> pretty b

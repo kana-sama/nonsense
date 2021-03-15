@@ -3,5 +3,5 @@ type plus<a extends number, b extends number> = [[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 
 type tree = the<unknown, {"tag": "leaf", "values": {"n": number}} | {"tag": "node", "values": {"l": tree, "r": tree}} | never>
 type leaf<n extends number> = the<tree, {"tag": "leaf", "values": {"n": n}}>
 type node<l extends tree, r extends tree> = the<tree, {"tag": "node", "values": {"l": l, "r": r}}>
-type sum<x extends tree> = the<number, x extends leaf<5> ? 0 : x extends leaf<infer x> ? x : x extends node<leaf<infer a>, leaf<infer b>> ? plus<10, plus<a, b>> : x extends node<infer l, infer r> ? plus<sum<l>, sum<r>> : never>
+type sum<x extends tree> = the<number, x extends leaf<5> ? 0 : x extends leaf<(infer x)> ? x : x extends node<leaf<(infer a)>, leaf<(infer b)>> ? plus<10, plus<a, b>> : x extends node<(infer l), (infer r)> ? plus<sum<l>, sum<r>> : never>
 type q = the<number, sum<node<node<node<leaf<1>, leaf<2>>, node<leaf<3>, leaf<4>>>, leaf<5>>>>
