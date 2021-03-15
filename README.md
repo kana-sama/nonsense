@@ -186,6 +186,7 @@ type eval<ctx extends context, e extends expr> = the<number,
 type pure<e extends expr> = the<number,
   eval<context_empty, e>>
 
+// a = 42, can be checked by typescript ide
 type a = the<number,
   pure<local<"a", add<lit<1>, lit<20>>, add<ref<"a">, ref<"a">>>>>
 ```
