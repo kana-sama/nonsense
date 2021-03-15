@@ -108,6 +108,7 @@ withPatternOf valueType pat next = do
       checkProduct (Value <$> argsTypes) args next
     (Number {}, _) -> checkExprIs valueType pat >> next
     (String {}, _) -> checkExprIs valueType pat >> next
+    (Boolean {}, _) -> checkExprIs valueType pat >> next
     (Interpolation parts, _) -> traverseProduct (zip parts (repeat (Value StringType))) next
     (Array as, Value (ArrayType t)) -> traverseProduct (zip as (repeat (Value t))) next
     (Array {}, _) -> fail (ExpectedTypeFor pat valueType)
@@ -167,6 +168,10 @@ inferExpr (Number _) = pure NumberType
 --  ──────────
 --  s : number
 inferExpr (String _) = pure StringType
+--
+--  ───────────────────────────────
+--  true : boolean, false : boolean
+inferExpr (Boolean _) = pure BooleanType
 --
 --    Г ⊢ a₁ … aᵤ : string
 --  ────────────────────────
@@ -257,6 +262,7 @@ makeContextItem name args type_ = (name, Function (snd <$> args) type_)
 checkDeclaration :: Declaration -> TC [(Name, Type)]
 checkDeclaration (Definition name args type_ body) = do
   let contextItem = makeContextItem name args type_
+  checkUndeclared name
   withStackFrame (unName name) do
     withArguments args do
       withDeclared name (snd contextItem) do
@@ -264,18 +270,22 @@ checkDeclaration (Definition name args type_ body) = do
   pure [contextItem]
 checkDeclaration (Inductive name args constructors) = do
   let contextItem = makeContextItem name args Top
+  checkUndeclared name
   withStackFrame (unName name) do
     withArguments args do
       withDeclared name (snd contextItem) do
         for_ constructors \(Constructor name args) -> do
+          checkUndeclared name
           withArguments args (pure ())
   let constructorItems = fmap (\(Constructor conName conArgs) -> makeContextItem conName conArgs (Var name)) constructors
   pure (contextItem : constructorItems)
 checkDeclaration (External name args type_ _) = do
+  checkUndeclared name
   withStackFrame (unName name) do
     withArguments args (pure ())
   pure [makeContextItem name args type_]
 checkDeclaration (Declare name args type_) = do
+  checkUndeclared name
   withStackFrame (unName name) do
     withArguments args (pure ())
   pure [makeContextItem name args type_]
@@ -291,6 +301,7 @@ defaultContext :: Context
 defaultContext =
   [ ("number", Value Top),
     ("string", Value Top),
+    ("boolean", Value Top),
     ("Record", Function [Top, Top] Top),
     ("the", Function [Top, Var "a"] (Var "a")),
     ("plus", Function [NumberType, NumberType] NumberType)

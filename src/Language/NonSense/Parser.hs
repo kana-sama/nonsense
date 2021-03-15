@@ -78,6 +78,13 @@ app = try do
   arguments <- parens "()" (expression `sepBy` comma)
   pure (App function arguments)
 
+boolean :: Parser Expr
+boolean =
+  choice
+    [ Boolean True <$ keyword "true",
+      Boolean False <$ keyword "false"
+    ]
+
 interpolation :: Parser Expr
 interpolation = Interpolation <$> parens "<>" (expression `sepBy` comma)
 
@@ -131,6 +138,7 @@ expression =
   choice
     [ String <$> stringLiteral,
       Number <$> numberLiteral,
+      boolean,
       interpolation,
       array,
       arrayType,

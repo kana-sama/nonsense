@@ -31,6 +31,7 @@ data Expr
   | App Name [Expr]
   | Number Int
   | String Text
+  | Boolean Bool
   | Interpolation [Expr]
   | Array [Expr]
   | ArrayType Type
@@ -43,6 +44,11 @@ data Expr
   | Bottom
   deriving stock (Eq, Show)
 
+pattern NumberType :: Expr
 pattern NumberType = Var "number"
 
+pattern StringType :: Expr
 pattern StringType = Var "string"
+
+pattern BooleanType :: Expr
+pattern BooleanType = Var "boolean"

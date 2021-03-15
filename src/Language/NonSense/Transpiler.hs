@@ -26,6 +26,7 @@ transpileExpr (NS.Var name) = TS.Var (transpileName name) Nothing
 transpileExpr (NS.App name args) = TS.Var (transpileName name) (Just (transpileExpr <$> args))
 transpileExpr (NS.Number x) = TS.NumberLit x
 transpileExpr (NS.String x) = TS.StringLit x
+transpileExpr (NS.Boolean x) = TS.BooleanLit x
 transpileExpr (NS.Interpolation parts) = TS.StringInterpolation (transpileInterpolationPart <$> parts)
 transpileExpr (NS.Array xs) = TS.ArrayLit (transpileExpr <$> xs)
 transpileExpr (NS.ArrayType elem) = TS.ArrayType (transpileExpr elem)

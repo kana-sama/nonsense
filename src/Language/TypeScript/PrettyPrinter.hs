@@ -14,6 +14,8 @@ instance Pretty Expr where
   pretty (Var name (Just args)) = pretty name <> "<" <> intercalate ", " (pretty <$> args) <> ">"
   pretty (NumberLit num) = show num
   pretty (StringLit str) = show str
+  pretty (BooleanLit True) = "true"
+  pretty (BooleanLit False) = "false"
   pretty (ArrayLit values) = "[" <> intercalate ", " (pretty <$> values) <> "]"
   pretty (ObjectLit kvs) = "{" <> intercalate ", " [show k <> ": " <> pretty v | (k, v) <- kvs] <> "}"
   pretty (StringInterpolation elems) = "`" <> foldMap prettyElem elems <> "`"

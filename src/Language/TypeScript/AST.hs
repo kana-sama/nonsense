@@ -15,6 +15,7 @@ data Expr
   = Var Ident (Maybe [Expr])
   | NumberLit Int
   | StringLit Text
+  | BooleanLit Bool
   | ArrayLit [Expr]
   | ObjectLit [(Text, Expr)]
   | StringInterpolation [Either Text Expr]
