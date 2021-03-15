@@ -91,8 +91,8 @@ withExtraContext :: [(Name, Type)] -> TC a -> TC a
 withExtraContext ctx' (TC action) = TC do
   local (\(Env ctx cs) -> Env (ctx' <> ctx) cs) action
 
-checkExpr :: Expr -> Type -> TC ()
-checkExpr expr type_ = do
+checkExprIs :: Type -> Expr -> TC ()
+checkExprIs type_ expr = do
   actualType <- inferExpr expr
   unless (Value actualType == type_) do
     fail (InvalidTypeFor expr (Actual (Value actualType)) (Expected type_))
@@ -100,14 +100,14 @@ checkExpr expr type_ = do
 withPatternOf :: Type -> Expr -> TC a -> TC a
 withPatternOf valueType pat next = do
   case (pat, valueType) of
-    (Var {}, _) -> checkExpr pat valueType >> next
+    (Var {}, _) -> checkExprIs valueType pat >> next
     (App name args, _) -> do
       (argsTypes, constructorType) <- lookupForFunction name
       unless (valueType == Value constructorType) do
         fail (InvalidTypeFor pat (Actual (Value constructorType)) (Expected valueType))
       checkProduct (Value <$> argsTypes) args next
-    (Number {}, _) -> checkExpr pat valueType >> next
-    (String {}, _) -> checkExpr pat valueType >> next
+    (Number {}, _) -> checkExprIs valueType pat >> next
+    (String {}, _) -> checkExprIs valueType pat >> next
     (Array as, Value (ArrayType t)) -> traverseProduct (zip as (repeat (Value t))) next
     (Array {}, _) -> fail (ExpectedTypeFor pat valueType)
     (ArrayType a, _) -> withPatternOf (Value Top) a next
@@ -117,8 +117,8 @@ withPatternOf valueType pat next = do
     (Wildcard name, _) -> withDeclared name valueType next
     (Match _ _, _) -> fail (UnsupportedPattern pat)
     (Let _ _, _) -> fail (UnsupportedPattern pat)
-    (Top, _) -> checkExpr pat valueType >> next
-    (Bottom, _) -> checkExpr pat valueType >> next
+    (Top, _) -> checkExprIs valueType pat >> next
+    (Bottom, _) -> checkExprIs valueType pat >> next
   where
     checkProduct formals pats next = do
       unless (length formals == length pats) do
@@ -133,7 +133,7 @@ withPatternOf valueType pat next = do
 withArguments :: Arguments -> TC a -> TC a
 withArguments [] next = next
 withArguments ((name_, type_) : args) next = do
-  checkExpr type_ (Value Top)
+  checkExprIs (Value Top) type_
   withDeclared name_ (Value type_) do
     withArguments args next
 
@@ -161,17 +161,17 @@ inferExpr (App fun args) = do
 --
 --  ──────────
 --  n : number
-inferExpr (Number _) = pure (Var "number")
+inferExpr (Number _) = pure NumberType
 --
 --  ──────────
 --  s : number
-inferExpr (String _) = pure (Var "string")
+inferExpr (String _) = pure StringType
 --
 --  ─────────────
 --  [] : array(⊤)
 inferExpr (Array []) = pure Top
 --
---    Г ⊢ a₁ : t, …, aᵤ : t
+--       Г ⊢ a₁ … aᵤ : t
 --  ──────────────────────────
 --  Г ⊢ [a₁, …, aᵤ] : array(t)
 inferExpr (Array elems) = do
@@ -185,7 +185,7 @@ inferExpr (Array elems) = do
 --  Г ⊢ array(t) : ⊤
 inferExpr (ArrayType elemType) = do
   elemTypeType <- inferExpr elemType
-  checkExpr elemTypeType (Value Top)
+  checkExprIs (Value Top) elemTypeType
   pure Top
 --
 --       Г ⊢ a₁ : t₁, …, aᵤ : tᵤ
@@ -193,12 +193,12 @@ inferExpr (ArrayType elemType) = do
 --  Г ⊢ (a₁, …, aᵤ) : tuple(t₁, …, tᵤ)
 inferExpr (Tuple elems) = TupleType <$> for elems inferExpr
 --
---   Г ⊢ t₁ : ⊤, …, tᵤ : ⊤
+--       Г ⊢ t₁ … tᵤ : ⊤
 --  ─────────────────────────
 --  Г ⊢ tuple(t₁, …, tᵤ) : ⊤
 inferExpr (TupleType elemsTypes) = do
   for elemsTypes \elemType -> do
-    checkExpr elemType (Value Top)
+    checkExprIs (Value Top) elemType
   pure Top
 inferExpr (Wildcard name) = fail (FailToInferTypeOfWildCard name)
 --
@@ -229,8 +229,8 @@ inferExpr (Let [] next) = inferExpr next
 --           Г ⊢ let x : t₁ = a, xs in b : t₂
 inferExpr (Let (LetBinding name type_ value : bindings) next) = do
   withStackFrame (unName name) do
-    checkExpr type_ (Value Top)
-    checkExpr value (Value type_)
+    checkExprIs (Value Top) type_
+    checkExprIs (Value type_) value
     withDeclared name (Value type_) do
       inferExpr (Let bindings next)
 --
@@ -252,7 +252,7 @@ checkDeclaration (Definition name args type_ body) = do
   withStackFrame (unName name) do
     withArguments args do
       withDeclared name (snd contextItem) do
-        checkExpr body (Value type_)
+        checkExprIs (Value type_) body
   pure [contextItem]
 checkDeclaration (Inductive name args constructors) = do
   let contextItem = makeContextItem name args Top
@@ -285,7 +285,7 @@ defaultContext =
     ("string", Value Top),
     ("Record", Function [Top, Top] Top),
     ("the", Function [Top, Var "a"] (Var "a")),
-    ("plus", Function [Var "number", Var "number"] (Var "number"))
+    ("plus", Function [NumberType, NumberType] NumberType)
   ]
 
 check :: [Declaration] -> Maybe (Env, TypeCheckError)

@@ -52,6 +52,13 @@ numberLiteral = L.signed sc (lexeme L.decimal)
 keyword :: Text -> Parser Text
 keyword keyword = try $ lexeme (string keyword <* notFollowedBy alphaNumChar)
 
+parens :: Text -> Parser a -> Parser a
+parens "()" = between (symbol "(") (symbol ")")
+parens "[]" = between (symbol "[") (symbol "]")
+parens "{}" = between (symbol "{") (symbol "}")
+parens "<>" = between (symbol "<") (symbol ">")
+parens _ = error "invalid paren type"
+
 name :: Parser Name
 name = try do
   n <- lexeme $ Name . pack <$> liftA2 (:) letterChar (many (alphaNumChar <|> oneOf ['_', '-', '?']))
@@ -59,14 +66,17 @@ name = try do
     failure (Just (Label (NonEmpty.fromList "name can't be keyword"))) mempty
   pure n
 
-parens :: Text -> Parser a -> Parser a
-parens "()" = between (symbol "(") (symbol ")")
-parens "[]" = between (symbol "[") (symbol "]")
-parens "{}" = between (symbol "{") (symbol "}")
-parens _ = error "invalid paren type"
-
 comma :: Parser ()
 comma = void (symbol ",")
+
+var :: Parser Expr
+var = Var <$> name
+
+app :: Parser Expr
+app = try do
+  function <- name
+  arguments <- parens "()" (expression `sepBy` comma)
+  pure (App function arguments)
 
 array :: Parser Expr
 array = Array <$> parens "[]" (expression `sepBy` comma)
@@ -80,17 +90,8 @@ tuple = Tuple <$> parens "()" (expression `sepBy` comma)
 tupleType :: Parser Expr
 tupleType = TupleType <$> (keyword "tuple" *> parens "()" (expression `sepBy` comma))
 
-app :: Parser Expr
-app = try do
-  function <- name
-  arguments <- parens "()" (expression `sepBy` comma)
-  pure (App function arguments)
-
-top :: Parser Expr
-top = Top <$ keyword "top"
-
-bottom :: Parser Expr
-bottom = Bottom <$ keyword "bottom"
+wildrcard :: Parser Expr
+wildrcard = Wildcard <$> (char '?' *> name)
 
 match :: Parser Expr
 match = do
@@ -105,22 +106,22 @@ match = do
     pure (pat, val)
   pure (Match expr cases)
 
-letBinding :: Parser LetBinding
-letBinding = do
-  name_ <- name
-  type_ <- symbol ":" *> expression
-  value <- symbol "=>" *> expression
-  pure (LetBinding name_ type_ value)
-
 let_ :: Parser Expr
 let_ = do
   keyword "let"
-  bindings <- many letBinding
+  bindings <- many do
+    name_ <- name
+    type_ <- symbol ":" *> expression
+    value <- symbol "=>" *> expression
+    pure (LetBinding name_ type_ value)
   next <- keyword "in" *> expression
   pure (Let bindings next)
 
-wildrcard :: Parser Expr
-wildrcard = Wildcard <$> (char '?' *> name)
+top :: Parser Expr
+top = Top <$ keyword "top"
+
+bottom :: Parser Expr
+bottom = Bottom <$ keyword "bottom"
 
 expression :: Parser Expr
 expression =
@@ -128,16 +129,16 @@ expression =
     [ String <$> stringLiteral,
       Number <$> numberLiteral,
       array,
-      tuple,
       arrayType,
+      tuple,
       tupleType,
-      app,
-      wildrcard,
       match,
       let_,
       top,
       bottom,
-      Var <$> name
+      app,
+      var,
+      wildrcard
     ]
 
 arguments :: Parser Arguments

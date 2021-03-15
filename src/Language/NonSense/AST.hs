@@ -1,3 +1,5 @@
+{-# LANGUAGE PatternSynonyms #-}
+
 module Language.NonSense.AST where
 
 import NSPrelude
@@ -39,3 +41,7 @@ data Expr
   | Top
   | Bottom
   deriving stock (Eq, Show)
+
+pattern NumberType = Var "number"
+
+pattern StringType = Var "string"
