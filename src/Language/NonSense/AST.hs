@@ -31,6 +31,7 @@ data Expr
   | App Name [Expr]
   | Number Int
   | String Text
+  | Interpolation [Expr]
   | Array [Expr]
   | ArrayType Type
   | Tuple [Expr]

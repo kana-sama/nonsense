@@ -17,11 +17,16 @@ transpileLetBinding :: NS.LetBinding -> TS.Expr -> TS.Expr
 transpileLetBinding (NS.LetBinding name type_ value) next =
   TS.Extends (transpileExpr value) (typed type_ (TS.Infer (transpileName name))) next TS.Never
 
+transpileInterpolationPart :: NS.Expr -> Either Text TS.Expr
+transpileInterpolationPart (NS.String s) = Left s
+transpileInterpolationPart other = Right (transpileExpr other)
+
 transpileExpr :: NS.Expr -> TS.Expr
 transpileExpr (NS.Var name) = TS.Var (transpileName name) Nothing
 transpileExpr (NS.App name args) = TS.Var (transpileName name) (Just (transpileExpr <$> args))
 transpileExpr (NS.Number x) = TS.NumberLit x
 transpileExpr (NS.String x) = TS.StringLit x
+transpileExpr (NS.Interpolation parts) = TS.StringInterpolation (transpileInterpolationPart <$> parts)
 transpileExpr (NS.Array xs) = TS.ArrayLit (transpileExpr <$> xs)
 transpileExpr (NS.ArrayType elem) = TS.ArrayType (transpileExpr elem)
 transpileExpr (NS.Tuple xs) = TS.ArrayLit (transpileExpr <$> xs)

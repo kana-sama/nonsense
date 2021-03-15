@@ -78,6 +78,9 @@ app = try do
   arguments <- parens "()" (expression `sepBy` comma)
   pure (App function arguments)
 
+interpolation :: Parser Expr
+interpolation = Interpolation <$> parens "<>" (expression `sepBy` comma)
+
 array :: Parser Expr
 array = Array <$> parens "[]" (expression `sepBy` comma)
 
@@ -128,6 +131,7 @@ expression =
   choice
     [ String <$> stringLiteral,
       Number <$> numberLiteral,
+      interpolation,
       array,
       arrayType,
       tuple,

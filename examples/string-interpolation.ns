@@ -1,0 +1,19 @@
+inductive optional-string : top =>
+| some(str : string)
+| none
+
+def with-default(d : string, opt : optional-string) : string =>
+  match opt with
+  | some(?x) => x
+  | none => d
+
+def make-hello(name : string) : string =>
+  <"Hello, ", name, "!">
+
+def get-name(hello : string) : optional-string =>
+  match hello with
+  | <"Hello, ", ?name, "!"> => some(name)
+  | ?other => none
+
+def x : string =>
+  with-default("kana", get-name(make-hello("KANA")))

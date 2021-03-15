@@ -108,6 +108,7 @@ withPatternOf valueType pat next = do
       checkProduct (Value <$> argsTypes) args next
     (Number {}, _) -> checkExprIs valueType pat >> next
     (String {}, _) -> checkExprIs valueType pat >> next
+    (Interpolation parts, _) -> traverseProduct (zip parts (repeat (Value StringType))) next
     (Array as, Value (ArrayType t)) -> traverseProduct (zip as (repeat (Value t))) next
     (Array {}, _) -> fail (ExpectedTypeFor pat valueType)
     (ArrayType a, _) -> withPatternOf (Value Top) a next
@@ -166,6 +167,13 @@ inferExpr (Number _) = pure NumberType
 --  ──────────
 --  s : number
 inferExpr (String _) = pure StringType
+--
+--    Г ⊢ a₁ … aᵤ : string
+--  ────────────────────────
+--  Г ⊢ <a₁, …, aᵤ> : string
+inferExpr (Interpolation parts) = do
+  for parts (checkExprIs (Value StringType))
+  pure StringType
 --
 --  ─────────────
 --  [] : array(⊤)
