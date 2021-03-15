@@ -34,7 +34,7 @@ numberLiteral :: Parser Int
 numberLiteral = L.signed sc (lexeme L.decimal)
 
 keyword :: Text -> Parser Text
-keyword keyword = lexeme (string keyword <* notFollowedBy alphaNumChar)
+keyword keyword = try $ lexeme (string keyword <* notFollowedBy alphaNumChar)
 
 name :: Parser Name
 name = try do
@@ -59,13 +59,13 @@ object = Object <$> between (symbol "{") (symbol "}") (keyValue `sepBy` comma)
       pure (key, value)
 
 app :: Parser Expr
-app = do
+app = try do
   function <- name
   arguments <- between (symbol "(") (symbol ")") (expression `sepBy` comma)
   pure (App function arguments)
 
 universum :: Parser Expr
-universum = U <$ symbol "U"
+universum = U <$ keyword "U"
 
 match :: Parser Expr
 match = do
@@ -115,9 +115,9 @@ expression =
       wildrcard,
       match,
       let_,
-      try arrayType,
-      try universum,
-      try app,
+      arrayType,
+      universum,
+      app,
       Var <$> name
     ]
 
