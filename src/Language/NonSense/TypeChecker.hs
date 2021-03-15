@@ -221,10 +221,10 @@ inferExpr (Match a cases) = do
 --  Г ⊢ let in x : t
 inferExpr (Let [] next) = inferExpr next
 --
---  Г ⊢ t₁ : ⊤, x : t₁;  Г, x : t₁ ⊢ let as in b : t₂
+--  Г ⊢ t₁ : ⊤, x : t₁;  Г, x : t₁ ⊢ let xs in b : t₂
 --  ──────────────────────────────────────────────────
---           Г ⊢ let x : t₁ = a, as in b : t₂
-inferExpr (Let ((LetBinding name type_ value) : bindings) next) = do
+--           Г ⊢ let x : t₁ = a, xs in b : t₂
+inferExpr (Let (LetBinding name type_ value : bindings) next) = do
   withStackFrame (unName name) do
     checkExpr type_ (Value Top)
     checkExpr value (Value type_)
