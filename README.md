@@ -49,7 +49,7 @@ inductive color
 | red
 | green
 | blue
-| mix(rgb : rgb)
+| mix(v : rgb)
 
 def to-rgb(c : color) : rgb =>
   match c with
@@ -75,12 +75,12 @@ type color = the<unknown,
   | {"tag": "red", "values": {}}
   | {"tag": "green", "values": {}}
   | {"tag": "blue", "values": {}}
-  | {"tag": "mix", "values": {"rgb": rgb}}
+  | {"tag": "mix", "values": {"v": v}}
   | never>
 type red = the<color, {"tag": "red", "values": {}}>
 type green = the<color, {"tag": "green", "values": {}}>
 type blue = the<color, {"tag": "blue", "values": {}}>
-type mix<rgb extends rgb> = the<color, {"tag": "mix", "values": {"rgb": rgb}}>
+type mix<v extends rgb> = the<color, {"tag": "mix", "values": {"v": v}}>
 
 type to_rgb<c extends color> = the<rgb,
   c extends red ? mk_rgb<255, 0, 0> :
