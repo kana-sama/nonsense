@@ -52,7 +52,7 @@ inductive color
 | mix(rgb : rgb)
 
 def to-rgb(c : color) : rgb =>
-  match c
+  match c with
   | red => mk-rgb(255, 0, 0)
   | green => mk-rgb(0, 255, 0)
   | blue => mk-rgb(0, 0, 255)
@@ -106,7 +106,7 @@ external not(x : bool) : bool => "x extends true ? false : true"
 def not-ff : bool => not(ff)
 
 def not2(x : bool) : bool
-  match x
+  match x with
   | tt => ff
   | ff => tt
 
@@ -143,7 +143,7 @@ inductive expr
 | local(variable : string, value next : expr)
 
 def eval(ctx : context, e : expr) : number =>
-  match e
+  match e with
   | lit(?x) => x
   | ref(?x) => context-get(ctx, x)
   | add(?a, ?b) => plus(eval(ctx, a), eval(ctx, b))

@@ -11,7 +11,7 @@ newtype Parser a = Parser {unParser :: Parsec Void Text a}
   deriving newtype (Functor, Applicative, Monad, Alternative, MonadPlus, MonadParsec Void Text)
 
 keywords :: [Text]
-keywords = ["array", "in", "let", "def", "inductive", "external", "type", "match", "extends", "keyof", "typeof"]
+keywords = ["array", "in", "let", "def", "inductive", "external", "type", "match", "with", "extends", "keyof", "typeof"]
 
 sc :: Parser ()
 sc = L.space space1 (L.skipLineComment "#") empty
@@ -71,6 +71,7 @@ match :: Parser Expr
 match = do
   keyword "match"
   expr <- expression
+  keyword "with"
   cases <- many do
     symbol "|"
     pat <- expression

@@ -11,7 +11,7 @@ inductive expr
 | local(variable : string, value next : expr)
 
 def eval(ctx : context, e : expr) : number =>
-  match e
+  match e with
   | lit(?x) => x
   | ref(?x) => context-get(ctx, x)
   | add(?a, ?b) => plus(eval(ctx, a), eval(ctx, b))
