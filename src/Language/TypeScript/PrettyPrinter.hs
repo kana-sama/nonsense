@@ -16,7 +16,7 @@ instance Pretty Expr where
   pretty (StringLit str) = show str
   pretty (ArrayLit values) = "[" <> intercalate ", " (pretty <$> values) <> "]"
   pretty (ObjectLit kvs) = "{" <> intercalate ", " [show k <> ": " <> pretty v | (k, v) <- kvs] <> "}"
-  pretty (StringInterpolation elems) = "\"" <> foldMap prettyElem elems <> "\""
+  pretty (StringInterpolation elems) = "`" <> foldMap prettyElem elems <> "`"
     where
       prettyElem (Left lit) = lit
       prettyElem (Right expr) = "${" <> pretty expr <> "}"

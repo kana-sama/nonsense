@@ -13,18 +13,20 @@ dependencies:
   - base >= 4.14.1.0 && < 5
   - text
 
+ghc-options:
+  - -Wincomplete-patterns
+
 executables:
   ns-exe:
     main: Main.hs
     source-dirs: app
-    ghc-options: [-Wincomplete-patterns]
     dependencies:
       - ns
       - filepath
 
 library:
   source-dirs: src
-  ghc-options: [-Wincomplete-patterns]
+
   dependencies:
     - megaparsec
     - mtl
