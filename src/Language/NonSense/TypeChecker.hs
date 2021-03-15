@@ -110,7 +110,9 @@ withPatternOf valueType pat next = do
       unless (length args == length argsTypes) do
         fail (InvalidArgumentTypeFor name (Expected argsTypes) (Actual args))
       traverseProduct (zip args (Value <$> argsTypes)) next
-    (Tuple args, Value (TupleType argsTypes)) ->
+    (Tuple args, Value (TupleType argsTypes)) -> do
+      unless (length args == length argsTypes) do
+        fail (InvalidArgumentTypeFor "tuple" (Expected argsTypes) (Actual args))
       traverseProduct (zip args (Value <$> argsTypes)) next
     _ -> do
       checkExpr pat valueType
