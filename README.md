@@ -4,6 +4,14 @@ cabal run ns-exe transpile example.ns
 cabal run ns-exe typecheck example.ns
 ```
 
+## roadmap:
+[x] typecheker
+[ ] typecheker with subtyping
+[ ] pattern matching validation
+[ ] string manipulations and interpolation
+[ ] do-notation
+[ ] example with type-level parser!
+
 ## examples:
 ### function and constants
 ```lean
