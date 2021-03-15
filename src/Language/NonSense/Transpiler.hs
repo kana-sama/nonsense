@@ -26,7 +26,6 @@ transpileExpr (NS.Array xs) = TS.ArrayLit (transpileExpr <$> xs)
 transpileExpr (NS.ArrayType elem) = TS.ArrayType (transpileExpr elem)
 transpileExpr (NS.Tuple xs) = TS.ArrayLit (transpileExpr <$> xs)
 transpileExpr (NS.TupleType xs) = TS.ArrayLit (transpileExpr <$> xs)
-transpileExpr (NS.Object kvs) = TS.ObjectLit [(k, transpileExpr v) | (k, v) <- kvs]
 transpileExpr (NS.Wildcard name) = TS.Infer (transpileName name)
 transpileExpr (NS.Match e cases) =
   foldr (\(pat, expr) -> TS.Extends (transpileExpr e) (transpileExpr pat) (transpileExpr expr)) TS.Never cases

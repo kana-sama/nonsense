@@ -80,14 +80,6 @@ tuple = Tuple <$> parens "()" (expression `sepBy` comma)
 tupleType :: Parser Expr
 tupleType = TupleType <$> (keyword "tuple" *> parens "()" (expression `sepBy` comma))
 
-object :: Parser Expr
-object = Object <$> parens "{}" (keyValue `sepBy` comma)
-  where
-    keyValue = do
-      key <- stringLiteral
-      value <- symbol ":" *> expression
-      pure (key, value)
-
 app :: Parser Expr
 app = try do
   function <- name
@@ -137,7 +129,6 @@ expression =
       Number <$> numberLiteral,
       array,
       tuple,
-      object,
       arrayType,
       tupleType,
       app,

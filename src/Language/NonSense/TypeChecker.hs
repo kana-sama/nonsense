@@ -22,10 +22,9 @@ data TypeCheckError
   | InvalidArrayElementsTypes (Actual [Expr])
   | FailToInferTypeOfWildCard Name
   | InvalidTypeFor Expr (Actual Type) (Expected Type)
-  --  | InvalidPatternsType (Expected Expr) (Actual Expr)
-  --  | InvalidBranchesTypes (Actual [Expr])
-  --  | TypeIsNotTypeFor Name (Actual Expr)
-  --  | InvalidArgumentsCounts Name (Expected Int) (Actual Int)
+  | UnsupportedPattern Expr
+  | InvalidProductLength (Actual Int) (Expected Int)
+  | ExpectedTypeFor Expr Type
   deriving stock (Show)
 
 data Type
@@ -101,27 +100,35 @@ checkExpr expr type_ = do
 withPatternOf :: Type -> Expr -> TC a -> TC a
 withPatternOf valueType pat next = do
   case (pat, valueType) of
-    (Wildcard name, _) ->
-      withDeclared name valueType next
+    (Var {}, _) -> checkExpr pat valueType >> next
     (App name args, _) -> do
-      (argsTypes, resultType) <- lookupForFunction name
-      unless (valueType == Value resultType) do
-        fail (InvalidTypeFor pat (Actual (Value resultType)) (Expected valueType))
-      unless (length args == length argsTypes) do
-        fail (InvalidArgumentTypeFor name (Expected argsTypes) (Actual args))
-      traverseProduct (zip args (Value <$> argsTypes)) next
-    (Tuple args, Value (TupleType argsTypes)) -> do
-      unless (length args == length argsTypes) do
-        fail (InvalidArgumentTypeFor "tuple" (Expected argsTypes) (Actual args))
-      traverseProduct (zip args (Value <$> argsTypes)) next
-    _ -> do
-      checkExpr pat valueType
-      next
+      (argsTypes, constructorType) <- lookupForFunction name
+      unless (valueType == Value constructorType) do
+        fail (InvalidTypeFor pat (Actual (Value constructorType)) (Expected valueType))
+      checkProduct (Value <$> argsTypes) args next
+    (Number {}, _) -> checkExpr pat valueType >> next
+    (String {}, _) -> checkExpr pat valueType >> next
+    (Array as, Value (ArrayType t)) -> traverseProduct (zip as (repeat (Value t))) next
+    (Array {}, _) -> fail (ExpectedTypeFor pat valueType)
+    (ArrayType a, _) -> withPatternOf (Value Top) a next
+    (Tuple args, Value (TupleType argsTypes)) -> checkProduct (Value <$> argsTypes) args next
+    (Tuple {}, _) -> fail (ExpectedTypeFor pat valueType)
+    (TupleType as, _) -> traverseProduct (zip as (repeat (Value Top))) next
+    (Wildcard name, _) -> withDeclared name valueType next
+    (Match _ _, _) -> fail (UnsupportedPattern pat)
+    (Let _ _, _) -> fail (UnsupportedPattern pat)
+    (Top, _) -> checkExpr pat valueType >> next
+    (Bottom, _) -> checkExpr pat valueType >> next
   where
+    checkProduct formals pats next = do
+      unless (length formals == length pats) do
+        fail (InvalidProductLength (Actual (length pats)) (Expected (length formals)))
+      traverseProduct (zip pats formals) next
+
     traverseProduct [] next = next
-    traverseProduct ((arg, expectedArgType) : args) next = do
-      withPatternOf expectedArgType arg do
-        traverseProduct args next
+    traverseProduct ((pat, expectedPatType) : pats) next = do
+      withPatternOf expectedPatType pat do
+        traverseProduct pats next
 
 withArguments :: Arguments -> TC a -> TC a
 withArguments [] next = next
@@ -193,12 +200,6 @@ inferExpr (TupleType elemsTypes) = do
   for elemsTypes \elemType -> do
     checkExpr elemType (Value Top)
   pure Top
---
--- TODO: object type
---
---  ─────────
---  {...} : ⊤
-inferExpr (Object _) = pure Top
 inferExpr (Wildcard name) = fail (FailToInferTypeOfWildCard name)
 --
 --  ───────────────────────

@@ -33,7 +33,6 @@ data Expr
   | ArrayType Type
   | Tuple [Expr]
   | TupleType [Type]
-  | Object [(Text, Expr)]
   | Wildcard Name
   | Match Expr [(Expr, Expr)]
   | Let [LetBinding] Expr
