@@ -78,6 +78,13 @@ app = try do
   arguments <- parens "()" (expression `sepBy` comma)
   pure (App function arguments)
 
+annotated :: Parser Expr
+annotated = try $ parens "()" do
+  value <- expression
+  symbol ":"
+  type_ <- expression
+  pure (Annotated value type_)
+
 boolean :: Parser Expr
 boolean =
   choice
@@ -138,6 +145,7 @@ expression =
   choice
     [ String <$> stringLiteral,
       Number <$> numberLiteral,
+      annotated,
       boolean,
       interpolation,
       array,

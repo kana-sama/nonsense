@@ -29,6 +29,7 @@ data LetBinding = LetBinding Name Type Expr
 data Expr
   = Var Name
   | App Name [Expr]
+  | Annotated Expr Type
   | Number Int
   | String Text
   | Boolean Bool

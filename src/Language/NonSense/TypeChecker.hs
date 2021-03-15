@@ -25,6 +25,7 @@ data TypeCheckError
   | UnsupportedPattern Expr
   | InvalidProductLength (Actual Int) (Expected Int)
   | ExpectedTypeFor Expr Type
+  | TypeAnnotationIsNotMatchable
   deriving stock (Show)
 
 data Type
@@ -97,6 +98,19 @@ checkExprIs type_ expr = do
   unless (Value actualType == type_) do
     fail (InvalidTypeFor expr (Actual (Value actualType)) (Expected type_))
 
+hasWildcards :: Expr -> Bool
+hasWildcards (App _ args) = any hasWildcards args
+hasWildcards (Annotated value type_) = hasWildcards value || hasWildcards type_
+hasWildcards (Interpolation parts) = any hasWildcards parts
+hasWildcards (Array elems) = any hasWildcards elems
+hasWildcards (ArrayType t) = hasWildcards t
+hasWildcards (Tuple elems) = any hasWildcards elems
+hasWildcards (TupleType elems) = any hasWildcards elems
+hasWildcards (Wildcard _) = True
+hasWildcards (Match value cases) = hasWildcards value || any (\(pat, val) -> hasWildcards pat || hasWildcards val) cases
+hasWildcards (Let bindings next) = any (\(LetBinding _ type_ value) -> hasWildcards type_ || hasWildcards value) bindings || hasWildcards next
+hasWildcards _ = False
+
 withPatternOf :: Type -> Expr -> TC a -> TC a
 withPatternOf valueType pat next = do
   case (pat, valueType) of
@@ -106,6 +120,11 @@ withPatternOf valueType pat next = do
       unless (valueType == Value constructorType) do
         fail (InvalidTypeFor pat (Actual (Value constructorType)) (Expected valueType))
       checkProduct (Value <$> argsTypes) args next
+    (Annotated _ type_, _) | hasWildcards type_ -> fail TypeAnnotationIsNotMatchable
+    (Annotated value type_, _) -> do
+      unless (valueType == Value type_) do
+        fail (ExpectedTypeFor pat valueType)
+      withPatternOf (Value type_) value next
     (Number {}, _) -> checkExprIs valueType pat >> next
     (String {}, _) -> checkExprIs valueType pat >> next
     (Boolean {}, _) -> checkExprIs valueType pat >> next
@@ -160,6 +179,13 @@ inferExpr (App fun args) = do
   unless (formalArgsTypes == actualArgsTypes) do
     fail (InvalidArgumentTypeFor fun (Expected formalArgsTypes) (Actual actualArgsTypes))
   pure resultType
+--
+--   Г ⊢ a : t
+--  ───────────
+--  (a : t) : t
+inferExpr (Annotated value type_) = do
+  checkExprIs (Value type_) value
+  pure type_
 --
 --  ──────────
 --  n : number

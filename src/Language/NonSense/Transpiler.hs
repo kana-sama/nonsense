@@ -24,6 +24,7 @@ transpileInterpolationPart other = Right (transpileExpr other)
 transpileExpr :: NS.Expr -> TS.Expr
 transpileExpr (NS.Var name) = TS.Var (transpileName name) Nothing
 transpileExpr (NS.App name args) = TS.Var (transpileName name) (Just (transpileExpr <$> args))
+transpileExpr (NS.Annotated value type_) = typed type_ (transpileExpr value)
 transpileExpr (NS.Number x) = TS.NumberLit x
 transpileExpr (NS.String x) = TS.StringLit x
 transpileExpr (NS.Boolean x) = TS.BooleanLit x
