@@ -3,6 +3,7 @@ cabal run ns-exe transpile example.ns
 # or
 cabal run ns-exe typecheck example.ns
 ```
+## All examples [here](examples/)
 
 ## roadmap:
 - [x] typecheker
@@ -39,6 +40,30 @@ type answer_with_let_qmark = the<number,
       sum_of_three<a, b, 12>
     : never
   : never>
+```
+
+```lean
+def fst(x : tuple(number, string)) : number =>
+  match x with
+  | (?a, ?b) => a
+
+def snd(x : tuple(number, string)) : string =>
+  match x with
+  | (?a, ?b) => b
+
+def x : tuple(number, string) => (42, "hello")
+def y : tuple(string, number) => (snd(x), fst(x))
+```
+```typescript
+type fst<x extends [number, string]> = the<number,
+  x extends [infer a, infer b] ? a :
+  never>
+type snd<x extends [number, string]> = the<string,
+  x extends [infer a, infer b] ? b :
+  never>
+
+type x = the<[number, string], [42, "hello"]>
+type y = the<[string, number], [snd<x>, fst<x>]>
 ```
 
 ### inductive types and matching
@@ -146,7 +171,7 @@ external ff : bool => "false"
 external not(x : bool) : bool => "x extends true ? false : true"
 def not-ff : bool => not(ff)
 
-def not2(x : bool) : bool
+def not2(x : bool) : bool =>
   match x with
   | tt => ff
   | ff => tt

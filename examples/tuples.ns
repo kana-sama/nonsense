@@ -1,0 +1,10 @@
+def fst(x : tuple(number, string)) : number =>
+  match x with
+  | (?a, ?b) => a
+
+def snd(x : tuple(number, string)) : string =>
+  match x with
+  | (?a, ?b) => b
+
+def x : tuple(number, string) => (42, "hello")
+def y : tuple(string, number) => (snd(x), fst(x))

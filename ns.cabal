@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: c33615b9c3cb80616665e16e8f7425f7b93916f16d68f495717be23a6dbda8ea
+-- hash: 8a7485373dcd5e760fdad407a89016330137bce29fb583c9735ecd6717134118
 
 name:               ns
 version:            0.0.0
@@ -23,14 +23,13 @@ library
       Paths_ns
   hs-source-dirs:
       src
-  default-extensions: OverloadedStrings GeneralizedNewtypeDeriving DerivingStrategies FlexibleInstances BlockArguments NoImplicitPrelude LambdaCase DeriveDataTypeable
+  default-extensions: OverloadedStrings GeneralizedNewtypeDeriving DerivingStrategies FlexibleInstances BlockArguments NoImplicitPrelude LambdaCase
   ghc-options: -Wincomplete-patterns
   build-depends:
       base >=4.14.1.0 && <5
     , megaparsec
     , mtl
     , text
-    , uniplate
   default-language: Haskell2010
 
 executable ns-exe
@@ -39,7 +38,7 @@ executable ns-exe
       Paths_ns
   hs-source-dirs:
       app
-  default-extensions: OverloadedStrings GeneralizedNewtypeDeriving DerivingStrategies FlexibleInstances BlockArguments NoImplicitPrelude LambdaCase DeriveDataTypeable
+  default-extensions: OverloadedStrings GeneralizedNewtypeDeriving DerivingStrategies FlexibleInstances BlockArguments NoImplicitPrelude LambdaCase
   ghc-options: -Wincomplete-patterns
   build-depends:
       base >=4.14.1.0 && <5

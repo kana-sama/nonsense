@@ -1,0 +1,27 @@
+def context : top => Record(string, number)
+external context-empty : context => "{}"
+external context-get(ctx : context, name : string) : number => "ctx[name]"
+external context-set(ctx : context, name : string, val : number) : context =>
+  "(Omit<ctx, name> & Record<name, val>)"
+
+inductive expr : top =>
+| lit(value : number)
+| ref(variable : string)
+| add(a b : expr)
+| local(variable : string, value next : expr)
+
+def eval(ctx : context, e : expr) : number =>
+  match e with
+  | lit(?x) => x
+  | ref(?x) => context-get(ctx, x)
+  | add(?a, ?b) => plus(eval(ctx, a), eval(ctx, b))
+  | local(?name, ?value, ?next) =>
+      let evaled-value : number => eval(ctx, value)
+          new-context : context => context-set(ctx, name, evaled-value)
+       in eval(new-context, next)
+
+def pure(e : expr) : number =>
+  eval(context-empty, e)
+
+def a : number =>
+  pure(local("a", add(lit(1), lit(20)), add(ref("a"), ref("a"))))

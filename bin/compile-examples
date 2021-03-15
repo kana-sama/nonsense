@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+
+hpack
+cabal build
+
+for example in ./examples/*.ns
+do
+  cabal run ns-exe transpile $example
+done

@@ -1,0 +1,14 @@
+external bool : top => "boolean"
+external tt : bool => "true"
+external ff : bool => "false"
+
+external not-1(x : bool) : bool =>
+  "x extends true ? false : true"
+
+def not-2(x : bool) : bool =>
+  match x with
+  | tt => ff
+  | ff => tt
+
+def not-ff : bool => not-1(ff)
+def not-tt : bool => not-2(tt)

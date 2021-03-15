@@ -1,0 +1,10 @@
+def sum-of-three(a b c : number) : number =>
+  plus(a, plus(b, c))
+
+def answer? : number =>
+  sum-of-three(10, 20, 12)
+
+def answer-with-let? : number =>
+  let a : number => 10
+      b : number => 20
+   in sum-of-three(a, b, 12)
