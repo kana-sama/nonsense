@@ -45,9 +45,9 @@ inductive color
 
 def to-rgb(c : color) : rgb =>
   match c
-  | red => rgb(255, 0, 0)
-  | green => rgb(0, 255, 0)
-  | blue => rgb(0, 0, 255)
+  | red => mk-rgb(255, 0, 0)
+  | green => mk-rgb(0, 255, 0)
+  | blue => mk-rgb(0, 0, 255)
   | mix(?rgb) => rgb
 
 def colors : array(rgb) =>
