@@ -1,0 +1,25 @@
+enum option(a : top) :=
+| some(value : a)
+| none
+
+def x : option(number) := some(number, 1)
+def y : option(number) := none(number)
+
+def option-is-some(a : top, x : option(a)) : number :=
+  match x with
+  | some(_, _) := 1
+  | none(_) := 0
+  end
+
+def alt(A : top, a b : option(A)) : option(A) :=
+  match a with
+  | some(.A, _) := a
+  | _ := b
+  end
+
+def examples : array(option(number)) :=
+  [ alt(number, some(number, 1), none(number))
+  , alt(number, some(number, 1), some(number, 2))
+  , alt(number, none(number), some(number, 2))
+  , alt(number, none(number), none(number))
+  ]

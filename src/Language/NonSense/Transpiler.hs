@@ -1,3 +1,6 @@
+{-# LANGUAGE TypeApplications #-}
+{-# OPTIONS_GHC -fplugin=RecordDotPreprocessor #-}
+
 module Language.NonSense.Transpiler where
 
 import qualified Language.NonSense.AST as NS
@@ -13,53 +16,42 @@ transpileName (NS.Name name) = TS.Ident (encodeName name)
 typed :: TS.Expr -> TS.Expr -> TS.Expr
 typed type_ expr = TS.App "the" [type_, expr]
 
-transpilePattern :: NS.Pattern -> TS.Expr
-transpilePattern NS.PatternWildcard = TS.Unknown
-transpilePattern (NS.PatternAnnotated pattern_ type_) = typed (transpileExpr type_) (transpilePattern pattern_)
-transpilePattern (NS.PatternVar name) = TS.Infer (transpileName name)
-transpilePattern (NS.PatternDot name) = TS.Var (transpileName name) Nothing
-transpilePattern (NS.PatternConstructor name arguments) = TS.Var (transpileName name) (Just (transpilePattern <$> arguments))
-transpilePattern (NS.PatternNumber number) = TS.NumberLit number
-transpilePattern (NS.PatternString string) = TS.StringLit string
-transpilePattern (NS.PatternBoolean boolean) = TS.BooleanLit boolean
-transpilePattern (NS.PatternInterpolation parts) = TS.StringInterpolation (transpilePart <$> parts)
-  where
-    transpilePart (NS.PatternString string) = Left string
-    transpilePart other = Right (transpilePattern other)
-transpilePattern (NS.PatternArray elements) = TS.ArrayLit (transpilePattern <$> elements)
-transpilePattern (NS.PatternTuple elements) = TS.ArrayLit (transpilePattern <$> elements)
-
-transpileLetBinding :: NS.LetBinding -> TS.Expr -> TS.Expr
-transpileLetBinding (NS.LetBinding pattern_ value) next =
-  TS.Extends (transpileExpr value) (transpilePattern pattern_) next TS.Never
-
--- -- TODO: optimizer for _ and full var
-transpileCaseBranch :: TS.Expr -> NS.CaseBranch -> TS.Expr -> TS.Expr
-transpileCaseBranch matchedValue (NS.CaseBranch pattern_ value) next =
-  TS.Extends matchedValue (transpilePattern pattern_) (transpileExpr value) next
-
 transpileExpr :: NS.Expr -> TS.Expr
-transpileExpr (NS.ExprVar name) = TS.Var (transpileName name) Nothing
-transpileExpr (NS.ExprApp name arguments) = TS.Var (transpileName name) (Just (transpileExpr <$> arguments))
-transpileExpr (NS.ExprAnnotated value type_) = typed (transpileExpr type_) (transpileExpr value)
-transpileExpr (NS.ExprNumber number) = TS.NumberLit number
-transpileExpr (NS.ExprString string) = TS.StringLit string
-transpileExpr (NS.ExprBoolean boolean) = TS.BooleanLit boolean
-transpileExpr (NS.ExprInterpolation parts) = TS.StringInterpolation (transpilePart <$> parts)
+transpileExpr (NS.Var name) = TS.Var (transpileName name) Nothing
+transpileExpr (NS.App name arguments) = TS.Var (transpileName name) (Just (transpileExpr <$> arguments))
+transpileExpr (NS.Annotated value type_) = typed (transpileExpr type_) (transpileExpr value)
+transpileExpr (NS.Number number) = TS.NumberLit number
+transpileExpr (NS.String string) = TS.StringLit string
+transpileExpr (NS.Boolean boolean) = TS.BooleanLit boolean
+transpileExpr (NS.Interpolation parts) = TS.StringInterpolation (transpilePart <$> parts)
   where
-    transpilePart (NS.ExprString string) = Left string
+    transpilePart :: NS.Expr -> Either Text TS.Expr
+    transpilePart (NS.String string) = Left string
     transpilePart other = Right (transpileExpr other)
-transpileExpr (NS.ExprArray elements) = TS.ArrayLit (transpileExpr <$> elements)
-transpileExpr (NS.ExprTuple elements) = TS.ArrayLit (transpileExpr <$> elements)
-transpileExpr (NS.ExprMatch value cases) = foldr (transpileCaseBranch (transpileExpr value)) TS.Never cases
-transpileExpr (NS.ExprLet bindings next) = foldr transpileLetBinding (transpileExpr next) bindings
-transpileExpr NS.ExprNumberType = TS.Var "number" Nothing
-transpileExpr NS.ExprStringType = TS.Var "string" Nothing
-transpileExpr NS.ExprBooleanType = TS.Var "boolean" Nothing
-transpileExpr (NS.ExprArrayType type_) = TS.ArrayType (transpileExpr type_)
-transpileExpr (NS.ExprTupleType types) = TS.ArrayLit (transpileExpr <$> types)
-transpileExpr NS.ExprTop = TS.Unknown
-transpileExpr NS.ExprBottom = TS.Never
+transpileExpr (NS.Array elements) = TS.ArrayLit (transpileExpr <$> elements)
+transpileExpr (NS.Tuple elements) = TS.ArrayLit (transpileExpr <$> elements)
+transpileExpr (NS.Match value cases) = foldr (transpileCaseBranch (transpileExpr value)) TS.Never cases
+  where
+    -- TODO: optimizer for _ and full var
+    transpileCaseBranch :: TS.Expr -> NS.CaseBranch -> TS.Expr -> TS.Expr
+    transpileCaseBranch matchedValue (NS.CaseBranch pattern_ value) next =
+      TS.Extends matchedValue (transpileExpr pattern_) (transpileExpr value) next
+transpileExpr (NS.Let bindings next) = foldr transpileLetBinding (transpileExpr next) bindings
+  where
+    transpileLetBinding :: NS.LetBinding -> TS.Expr -> TS.Expr
+    transpileLetBinding (NS.LetBinding pattern_ value) next =
+      TS.Extends (transpileExpr value) (transpileExpr pattern_) next TS.Never
+transpileExpr NS.Top = TS.Unknown
+transpileExpr NS.Bottom = TS.Never
+transpileExpr NS.NumberType = TS.Var "number" Nothing
+transpileExpr NS.StringType = TS.Var "string" Nothing
+transpileExpr NS.BooleanType = TS.Var "boolean" Nothing
+transpileExpr (NS.ArrayType elementType) = TS.ArrayType (transpileExpr elementType)
+transpileExpr (NS.TupleType elementsTypes) = TS.ArrayLit (transpileExpr <$> elementsTypes)
+transpileExpr NS.WildcardPattern = TS.Unknown
+transpileExpr (NS.DotPattern name) = TS.Var (transpileName name) Nothing
+transpileExpr (NS.InferPattern name) = TS.Infer (transpileName name)
+transpileExpr NS.Meta = error "impossible: meta"
 
 transpileArguments :: [NS.Argument] -> Maybe [(TS.Ident, Maybe TS.Expr)]
 transpileArguments [] = Nothing
@@ -67,36 +59,48 @@ transpileArguments arguments = Just (transpileArgument <$> arguments)
   where
     transpileArgument (NS.Argument name type_) = (transpileName name, Just (transpileExpr type_))
 
-makeSmartConstructor :: NS.Name -> NS.Constructor -> TS.Declaration
-makeSmartConstructor typeName (NS.Constructor name arguments) =
-  TS.TypeDeclaration (transpileName name) (transpileArguments arguments) $
-    typed (TS.Var (transpileName typeName) Nothing) $
-      let tag = TS.StringLit (NS.unName name)
-          payload = [TS.Var (transpileName argName) Nothing | NS.Argument argName _ <- arguments]
-       in case arguments of
-            [] -> tag
-            _ -> TS.ArrayLit (tag : payload)
+transpileConstructor :: [NS.Argument] -> NS.Constructor -> TS.Expr
+transpileConstructor typeArguments constructor =
+  case arguments of
+    [] -> TS.StringLit constructor.name.value
+    _ -> TS.ArrayLit (TS.StringLit constructor.name.value : payload)
+  where
+    arguments = typeArguments <> constructor.arguments
+    payload = [transpileExpr a.type_ | a <- arguments]
 
-transpileConstructor :: NS.Constructor -> TS.Expr
-transpileConstructor (NS.Constructor (NS.Name name) []) = TS.StringLit name
-transpileConstructor (NS.Constructor (NS.Name name) arguments) =
-  let payload = [transpileExpr argType | NS.Argument _ argType <- arguments]
-   in TS.ArrayLit (TS.StringLit name : payload)
+makeSmartConstructor :: NS.Name -> [NS.Argument] -> NS.Constructor -> TS.Declaration
+makeSmartConstructor typeName typeArguments constructor =
+  TS.TypeDeclaration (transpileName constructor.name) (transpileArguments arguments) do
+    typed constructorType do
+      case arguments of
+        [] -> constructorTag
+        _ -> TS.ArrayLit (constructorTag : constructorPayload)
+  where
+    arguments = typeArguments <> constructor.arguments
+    constructorTag = TS.StringLit constructor.name.value
+    constructorPayload =
+      [TS.Var (transpileName a.name) Nothing | a <- arguments]
+
+    constructorType =
+      case typeArguments of
+        [] -> TS.Var (transpileName typeName) Nothing
+        _ -> TS.Var (transpileName typeName) do
+          Just [TS.Var (transpileName a.name) Nothing | a <- typeArguments]
 
 transpileDeclaration :: NS.Declaration -> [TS.Declaration]
-transpileDeclaration (NS.Definition name args type_ value) = pure do
-  TS.TypeDeclaration (transpileName name) (transpileArguments args) do
+transpileDeclaration (NS.Definition name arguments type_ value) = pure do
+  TS.TypeDeclaration (transpileName name) (transpileArguments arguments) do
     typed (transpileExpr type_) (transpileExpr value)
-transpileDeclaration (NS.Enum name cons) =
+transpileDeclaration (NS.Enum name constructors arguments) =
   let decl =
-        TS.TypeDeclaration (transpileName name) Nothing do
+        TS.TypeDeclaration (transpileName name) (transpileArguments arguments) do
           typed TS.Unknown do
-            case cons of
+            case constructors of
               [] -> TS.Never
-              _ -> foldr1 TS.Union (transpileConstructor <$> cons)
-   in decl : fmap (makeSmartConstructor name) cons
-transpileDeclaration (NS.External name args type_ body) = pure do
-  TS.TypeDeclaration (transpileName name) (transpileArguments args) do
+              _ -> foldr1 TS.Union (transpileConstructor arguments <$> constructors)
+   in decl : fmap (makeSmartConstructor name arguments) constructors
+transpileDeclaration (NS.External name arguments type_ body) = pure do
+  TS.TypeDeclaration (transpileName name) (transpileArguments arguments) do
     typed (transpileExpr type_) (TS.External body)
 transpileDeclaration (NS.Declare _ _ _) = []
 transpileDeclaration (NS.Mutual declarations) =

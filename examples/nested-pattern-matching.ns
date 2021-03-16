@@ -1,4 +1,4 @@
-enum tree
+enum tree :=
 | leaf(n : number)
 | node(l r : tree)
 

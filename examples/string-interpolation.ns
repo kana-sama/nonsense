@@ -1,4 +1,4 @@
-enum optional-string
+enum optional-string :=
 | some(str : string)
 | none
 

@@ -1,3 +1,6 @@
+{-# LANGUAGE TypeApplications #-}
+{-# OPTIONS_GHC -fplugin=RecordDotPreprocessor #-}
+
 module Language.NonSense.Parser where
 
 import qualified Data.List.NonEmpty as NonEmpty
@@ -10,18 +13,35 @@ import qualified Text.Megaparsec.Char.Lexer as L
 
 type ConstructorName = Name
 
-newtype Parser a = Parser {unParser :: StateT (Set ConstructorName) (Parsec Void Text) a}
-  deriving newtype (Functor, Applicative, Monad, Alternative, MonadPlus, MonadState (Set ConstructorName), MonadParsec Void Text)
+data ParserMode = ValueMode | PatternMode
+  deriving (Eq)
+
+newtype Parser a = Parser {unParser :: ReaderT ParserMode (StateT (Set ConstructorName) (Parsec Void Text)) a}
+  deriving newtype (Functor, Applicative, Monad, Alternative, MonadPlus)
+  deriving newtype (MonadState (Set ConstructorName))
+  deriving newtype (MonadReader ParserMode)
+  deriving newtype (MonadParsec Void Text)
+
+getParserMode :: Parser ParserMode
+getParserMode = ask
 
 declareConstructor :: ConstructorName -> Parser ()
-declareConstructor name = modify' (Set.insert name)
+declareConstructor nameParser = modify' (Set.insert nameParser)
 
 isConstructor :: Name -> Parser Bool
-isConstructor name = gets (Set.member name)
+isConstructor nameParser = gets (Set.member nameParser)
+
+withPatternMode :: Parser a -> Parser a
+withPatternMode = local (const PatternMode)
+
+guardMode :: ParserMode -> Parser ()
+guardMode mode = do
+  currentMode <- getParserMode
+  guard (mode == currentMode)
 
 -- base
 
-keywords :: [Text]
+keywords :: [Name]
 keywords =
   [ "array",
     "tuple",
@@ -84,86 +104,130 @@ parens "{}" = between (symbol "{") (symbol "}")
 parens "<>" = between (symbol "<") (symbol ">")
 parens _ = error "invalid paren type"
 
-name :: Parser Name
-name = try do
-  n <- lexeme $ Name . pack <$> liftA2 (:) letterChar (many (alphaNumChar <|> oneOf ['_', '-', '?']))
-  when (unName n `elem` keywords) do
+nameParser :: Parser Name
+nameParser = try do
+  name <- lexeme $ Name . pack <$> liftA2 (:) letterChar (many (alphaNumChar <|> oneOf ['_', '-', '?']))
+  when (name `elem` keywords) do
     failure (Just (Label (NonEmpty.fromList "name can't be keyword"))) mempty
-  pure n
+  pure name
 
 comma :: Parser ()
 comma = void (symbol ",")
 
 -- domain parsers
 
-pattern' :: Parser Pattern
-pattern' = choice [wildrcard, annotated, dot, number, string, boolean, interpolation, array, tuple, constructor, var] <?> "pattern"
-  where
-    items = pattern' `sepBy` comma
-    wildrcard = keyword "_" $> PatternWildcard
-    annotated = try (parens "()" (PatternAnnotated <$> pattern' <*> (symbol ":" *> expr)))
-    var = do
-      varName <- name
-      varIsConstructor <- isConstructor varName
-      if varIsConstructor
-        then pure (PatternDot varName)
-        else pure (PatternVar varName)
-    dot = char '.' *> name <&> PatternDot
-    constructor = try (PatternConstructor <$> name <*> parens "()" items)
-    number = numberLiteral <&> PatternNumber
-    string = stringLiteral <&> PatternString
-    boolean = booleanLiteral <&> PatternBoolean
-    interpolation = parens "<>" items <&> PatternInterpolation
-    array = parens "[]" items <&> PatternArray
-    tuple = parens "()" items <&> PatternTuple
+var :: Parser Expr
+var = try do
+  guardMode ValueMode
+  Var <$> nameParser
+
+app :: Parser Expr
+app = try (App <$> nameParser <*> parens "()" exprs)
+
+annotated :: Parser Expr
+annotated = try (parens "()" (Annotated <$> expr <*> (symbol ":" *> expr)))
+
+number :: Parser Expr
+number = numberLiteral <&> Number
+
+string_ :: Parser Expr
+string_ = stringLiteral <&> String
+
+boolean :: Parser Expr
+boolean = booleanLiteral <&> Boolean
+
+interpolation :: Parser Expr
+interpolation = parens "<>" exprs <&> Interpolation
+
+array :: Parser Expr
+array = parens "[]" exprs <&> Array
+
+tuple :: Parser Expr
+tuple = parens "()" exprs <&> Tuple
+
+caseBranch :: Parser CaseBranch
+caseBranch = CaseBranch <$> (symbol "|" *> withPatternMode expr) <*> (symbol ":=" *> expr)
+
+match_ :: Parser Expr
+match_ = try do
+  guardMode ValueMode
+  Match <$> (keyword "match" *> expr <* keyword "with") <*> (caseBranch `manyTill` keyword "end")
+
+letBinding :: Parser LetBinding
+letBinding = LetBinding <$> (withPatternMode expr) <*> (symbol ":=" *> expr)
+
+let_ :: Parser Expr
+let_ = try do
+  guardMode ValueMode
+  Let <$> (keyword "let" *> many letBinding) <*> (keyword "in" *> expr)
+
+numberType :: Parser Expr
+numberType = keyword "number" $> NumberType
+
+stringType :: Parser Expr
+stringType = keyword "string" $> StringType
+
+booleanType :: Parser Expr
+booleanType = keyword "boolean" $> BooleanType
+
+arrayType :: Parser Expr
+arrayType = keyword "array" *> parens "()" expr <&> ArrayType
+
+tupleType :: Parser Expr
+tupleType = keyword "tuple" *> parens "()" exprs <&> TupleType
+
+top :: Parser Expr
+top = keyword "top" $> Top
+
+bottom :: Parser Expr
+bottom = keyword "bottom" $> Bottom
+
+wildrcardPattern :: Parser Expr
+wildrcardPattern = try do
+  guardMode PatternMode
+  keyword "_" $> WildcardPattern
+
+dotPattern :: Parser Expr
+dotPattern = try do
+  guardMode PatternMode
+  char '.' *> nameParser <&> DotPattern
+
+namePattern :: Parser Expr
+namePattern = try do
+  guardMode PatternMode
+  varName <- nameParser
+  varIsConstructor <- isConstructor varName
+  if varIsConstructor
+    then pure (DotPattern varName)
+    else pure (InferPattern varName)
 
 expr :: Parser Expr
 expr =
   (<?> "expr") . choice . concat $
-    [ [app, annotated],
-      [number, string, boolean],
-      [interpolation, array, tuple],
-      [match, let_],
-      [numberType, stringType, booleanType, arrayType, tupleType],
-      [topType, bottomType],
-      [var]
+    [ [annotated],
+      [number, string_, boolean, interpolation, array, tuple],
+      [match_, let_],
+      [top, bottom, numberType, stringType, booleanType, arrayType, tupleType],
+      [app, var],
+      [wildrcardPattern, dotPattern, namePattern]
     ]
-  where
-    items = expr `sepBy` comma
-    var = name <&> ExprVar
-    app = try (ExprApp <$> name <*> parens "()" items)
-    annotated = try (parens "()" (ExprAnnotated <$> expr <*> (symbol ":" *> expr)))
-    number = numberLiteral <&> ExprNumber
-    string = stringLiteral <&> ExprString
-    boolean = booleanLiteral <&> ExprBoolean
-    interpolation = parens "<>" items <&> ExprInterpolation
-    array = parens "[]" items <&> ExprArray
-    tuple = parens "()" items <&> ExprTuple
-    caseBranch = CaseBranch <$> (symbol "|" *> pattern') <*> (symbol ":=" *> expr)
-    match = ExprMatch <$> (keyword "match" *> expr <* keyword "with") <*> (caseBranch `manyTill` keyword "end")
-    letBinding = LetBinding <$> pattern' <*> (symbol ":=" *> expr)
-    let_ = ExprLet <$> (keyword "let" *> many letBinding) <*> (keyword "in" *> expr)
-    numberType = keyword "number" $> ExprNumberType
-    stringType = keyword "string" $> ExprStringType
-    booleanType = keyword "boolean" $> ExprBooleanType
-    arrayType = keyword "array" *> parens "()" expr <&> ExprArrayType
-    tupleType = keyword "tuple" *> parens "()" items <&> ExprTupleType
-    topType = keyword "top" $> ExprTop
-    bottomType = keyword "bottom" $> ExprBottom
 
-arguments :: Parser [Argument]
-arguments = concat <$> parens "()" (argument `sepBy` comma)
+exprs :: Parser [Expr]
+exprs = expr `sepBy` comma
+
+argumentsParser :: Parser [Argument]
+argumentsParser = concat <$> parens "()" (argument `sepBy` comma)
   where
     argument = do
-      argNames <- some name
+      argNames <- some nameParser
       argType <- keyword ":" *> expr
       pure [Argument argName argType | argName <- argNames]
 
 definition :: Parser Declaration
 definition = do
   keyword "def"
-  name_ <- name
-  args_ <- option [] arguments
+  name_ <- nameParser
+  args_ <- option [] argumentsParser
   type_ <- keyword ":" *> expr
   body_ <- keyword ":=" *> expr
   pure (Definition name_ args_ type_ body_)
@@ -171,21 +235,23 @@ definition = do
 enum :: Parser Declaration
 enum = do
   keyword "enum"
-  name_ <- name
-  cons_ <- many constructor
-  pure (Enum name_ cons_)
+  name_ <- nameParser
+  args_ <- option [] argumentsParser
+  cons_ <- keyword ":=" *> many constructor
+  declareConstructor name_
+  pure (Enum name_ cons_ args_)
   where
     constructor = do
-      constructorName <- symbol "|" *> name
-      constructorArguments <- option [] arguments
+      constructorName <- symbol "|" *> nameParser
+      constructorArguments <- option [] argumentsParser
       declareConstructor constructorName
       pure (Constructor constructorName constructorArguments)
 
 external :: Parser Declaration
 external = do
   keyword "external"
-  name_ <- name
-  args_ <- option [] arguments
+  name_ <- nameParser
+  args_ <- option [] argumentsParser
   type_ <- symbol ":" *> expr
   body_ <- symbol ":=" *> stringLiteral
   pure (External name_ args_ type_ body_)
@@ -193,8 +259,8 @@ external = do
 declare :: Parser Declaration
 declare = do
   keyword "declare"
-  name_ <- name
-  args_ <- option [] arguments
+  name_ <- nameParser
+  args_ <- option [] argumentsParser
   type_ <- symbol ":" *> expr
   pure (Declare name_ args_ type_)
 
@@ -211,6 +277,6 @@ module_ = sc *> many declaration <* eof
 
 parseDeclarations :: FilePath -> Text -> Either Text [Declaration]
 parseDeclarations path source =
-  case runParser (evalStateT (unParser module_) Set.empty) path source of
+  case runParser (evalStateT (runReaderT (unParser module_) ValueMode) Set.empty) path source of
     Right decls -> Right decls
     Left errors -> Left (pack (errorBundlePretty errors))

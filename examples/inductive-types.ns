@@ -1,7 +1,7 @@
-enum rgb
+enum rgb :=
 | mk-rgb(r g b : number)
 
-enum color
+enum color :=
 | red
 | green
 | blue

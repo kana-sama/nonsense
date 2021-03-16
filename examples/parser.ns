@@ -9,97 +9,91 @@ external record-merge(a : top, b : top) : top :=
 external space : string :=
   '" " | "\\n"'
 
-enum result-unit
-| result-unit-ok(rest : string)
-| result-unit-fail
+enum unit :=
+| mk-unit
 
-enum result-string
-| result-string-ok(value : string, rest : string)
-| result-string-fail
+enum result(a : top) :=
+| ok(value : a, rest : string)
+| fail
 
-enum result-type
-| result-type-ok(value : top, rest : string)
-| result-type-fail
-
-def parse-string(str : string, s : string) : result-unit :=
+def parse-string(str : string, s : string) : result(unit) :=
   match s with
-  | <.str, s> := result-unit-ok(s)
-  | _ := result-unit-fail
+  | <.str, s> := ok(unit, mk-unit, s)
+  | _ := fail(unit)
   end
 
-def parse-space(s : string) : result-unit :=
+def parse-space(s : string) : result(unit) :=
   match s with
   | <.space, s> := parse-space(s)
-  | _ := result-unit-ok(s)
+  | _ := ok(unit, mk-unit, s)
   end
 
-def parse-name(s : string) : result-string :=
+def parse-name(s : string) : result(string) :=
   match s with
-  | <name, ":", s> := result-string-ok(name, <":", s>)
-  | _ := result-string-fail
+  | <name, ":", s> := ok(string, name, <":", s>)
+  | _ := fail(string)
   end
 
 mutual
-  # todo add record type
-  def parse-type(s : string) : result-type :=
+  def parse-type(s : string) : result(top) :=
     match s with
-    | <"number", s> := result-type-ok(number, s)
-    | <"string", s> := result-type-ok(string, s)
-    | <"boolean", s> := result-type-ok(boolean, s)
+    | <"number", s> := ok(top, number, s)
+    | <"string", s> := ok(top, string, s)
+    | <"boolean", s> := ok(top, boolean, s)
     | _ := parse-record(s)
     end
 
-  def parse-field(s : string) : result-type :=
-  match parse-name(s) with
-  | result-string-fail := result-type-fail
-  | result-string-ok((name : string), s) :=
-    match parse-string(": ", s) with
-    | result-unit-fail := result-type-fail
-    | result-unit-ok(s) :=
-      match parse-type(s) with
-      | result-type-fail := result-type-fail
-      | result-type-ok(type_, s) :=
-        result-type-ok(record-singleton(name, type_), s)
+  def parse-field(s : string) : result(top) :=
+    match parse-name(s) with
+    | fail(string) := fail(top)
+    | ok(string, (name : string), s) :=
+      match parse-string(": ", s) with
+      | fail(unit) := fail(top)
+      | ok(unit, mk-unit, s) :=
+        match parse-type(s) with
+        | fail(top) := fail(top)
+        | ok(top, type_, s) :=
+          ok(top, record-singleton(name, type_), s)
+        end
       end
     end
-  end
 
-  def parse-fields(s : string) : result-type :=
+  def parse-fields(s : string) : result(top) :=
     match parse-field(s) with
-    | result-type-fail := result-type-ok(record-empty, s)
-    | result-type-ok(field, s) :=
+    | fail(top) := ok(top, record-empty, s)
+    | ok(top, field, s) :=
       match parse-string(",", s) with
-      | result-unit-fail := result-type-ok(field, s)
-      | result-unit-ok(s) :=
+      | fail(unit) := ok(top, field, s)
+      | ok(unit, mk-unit, s) :=
         match parse-space(s) with
-        | result-unit-fail := result-type-fail
-        | result-unit-ok(s) :=
+        | fail(unit) := fail(top)
+        | ok(unit, mk-unit, s) :=
           match parse-fields(s) with
-          | result-type-fail := result-type-fail
-          | result-type-ok(fields, s) :=
-            result-type-ok(record-merge(field, fields), s)
+          | fail(top) := fail(top)
+          | ok(top, fields, s) :=
+            ok(top, record-merge(field, fields), s)
           end
         end
       end
     end
 
-  def parse-record(s : string) : result-type :=
+  def parse-record(s : string) : result(top) :=
     match parse-string("{", s) with
-    | result-unit-fail := result-type-fail
-    | result-unit-ok(s) :=
+    | fail(unit) := fail(top)
+    | ok(unit, mk-unit, s) :=
       match parse-space(s) with
-      | result-unit-fail := result-type-fail
-      | result-unit-ok(s) :=
+      | fail(unit) := fail(top)
+      | ok(unit, mk-unit, s) :=
         match parse-fields(s) with
-        | result-type-fail := result-type-fail
-        | result-type-ok(fields, s) :=
+        | fail(top) := fail(top)
+        | ok(top, fields, s) :=
           match parse-space(s) with
-          | result-unit-fail := result-type-fail
-          | result-unit-ok(s) :=
+          | fail(unit) := fail(top)
+          | ok(unit, mk-unit, s) :=
             match parse-string("}", s) with
-            | result-unit-fail := result-type-fail
-            | result-unit-ok(s) :=
-              result-type-ok(record-fix(fields), s)
+            | fail(unit) := fail(top)
+            | ok(unit, mk-unit, s) :=
+              ok(top, record-fix(fields), s)
             end
           end
         end
@@ -107,9 +101,9 @@ mutual
     end
 end
 
-def run-type-result(result : result-type) : top :=
+def run-type-result(result : result(top)) : top :=
   match result with
-  | result-type-ok(value, "") := value
+  | ok(top, value, "") := value
   | _ := bottom
   end
 

@@ -6,5 +6,5 @@ cabal build
 for example in ./examples/*.ns
 do
   echo Transpile $example
-  cabal run --verbose=0 ns-exe transpile $example
+  cabal run --verbose=0 ns-exe transpile $example || exit 1
 done

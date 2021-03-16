@@ -8,6 +8,12 @@ default-extensions:
   - BlockArguments
   - NoImplicitPrelude
   - LambdaCase
+  - NamedFieldPuns
+  - DataKinds
+  - MultiParamTypeClasses
+  - GADTs
+  - UndecidableInstances
+  - DuplicateRecordFields
 
 dependencies:
   - base >= 4.14.1.0 && < 5
@@ -31,3 +37,5 @@ library:
     - megaparsec
     - mtl
     - containers
+    - record-dot-preprocessor
+    - record-hasfield

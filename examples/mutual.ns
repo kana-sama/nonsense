@@ -1,4 +1,4 @@
-enum nat
+enum nat :=
 | zero
 | succ(pred : nat)
 

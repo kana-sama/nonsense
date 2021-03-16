@@ -1,8 +1,8 @@
-def fst(x : tuple(number, string)) : number :=
+def fst(A B : top, x : tuple(A, B)) : A :=
   match x with | (a, _) := a end
 
-def snd(x : tuple(number, string)) : string :=
+def snd(A B : top, x : tuple(A, B)) : B :=
   let (_, b) := x in b
 
 def x : tuple(number, string) := (42, "hello")
-def y : tuple(string, number) := (snd(x), fst(x))
+def y : tuple(string, number) := (snd(number, string, x), fst(number, string, x))

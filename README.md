@@ -9,7 +9,7 @@ cabal run ns-exe typecheck example.ns
 - [x] typecheker
 - [ ] typecheker with subtyping
 - [ ] warnings about var-patterns shadowing
-- [ ] polymorphism
+- [x] polymorphism
 - [ ] pattern matching validation
 - [ ] type inference for patterns let-in/match
 - [x] string manipulations and interpolation

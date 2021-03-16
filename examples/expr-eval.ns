@@ -4,7 +4,7 @@ external context-get(ctx : context, key : string) : number := "ctx[key]"
 external context-set(ctx : context, key : string, val : number) : context :=
   "(Omit<ctx, key> & Record<key, val>)"
 
-enum expr
+enum expr :=
 | lit(value : number)
 | ref(variable : string)
 | add(a b : expr)
