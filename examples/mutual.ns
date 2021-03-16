@@ -5,14 +5,14 @@ enum nat
 mutual  
   def even(x : nat) : boolean :=
     match x with
-    | .zero := true
+    | zero := true
     | succ(n) := odd(n)
     end
 
 
   def odd(x : nat) : boolean :=
     match x with
-    | .zero := false
+    | zero := false
     | succ(n) := even(n)
     end
 end

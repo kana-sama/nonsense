@@ -1,14 +1,23 @@
 module Language.NonSense.Parser where
 
 import qualified Data.List.NonEmpty as NonEmpty
+import qualified Data.Set as Set
 import Language.NonSense.AST
 import NSPrelude
 import Text.Megaparsec
 import Text.Megaparsec.Char
 import qualified Text.Megaparsec.Char.Lexer as L
 
-newtype Parser a = Parser {unParser :: Parsec Void Text a}
-  deriving newtype (Functor, Applicative, Monad, Alternative, MonadPlus, MonadParsec Void Text)
+type ConstructorName = Name
+
+newtype Parser a = Parser {unParser :: StateT (Set ConstructorName) (Parsec Void Text) a}
+  deriving newtype (Functor, Applicative, Monad, Alternative, MonadPlus, MonadState (Set ConstructorName), MonadParsec Void Text)
+
+declareConstructor :: ConstructorName -> Parser ()
+declareConstructor name = modify' (Set.insert name)
+
+isConstructor :: Name -> Parser Bool
+isConstructor name = gets (Set.member name)
 
 -- base
 
@@ -93,7 +102,12 @@ pattern' = choice [wildrcard, annotated, dot, number, string, boolean, interpola
     items = pattern' `sepBy` comma
     wildrcard = keyword "_" $> PatternWildcard
     annotated = try (parens "()" (PatternAnnotated <$> pattern' <*> (symbol ":" *> expr)))
-    var = name <&> PatternVar
+    var = do
+      varName <- name
+      varIsConstructor <- isConstructor varName
+      if varIsConstructor
+        then pure (PatternDot varName)
+        else pure (PatternVar varName)
     dot = char '.' *> name <&> PatternDot
     constructor = try (PatternConstructor <$> name <*> parens "()" items)
     number = numberLiteral <&> PatternNumber
@@ -161,7 +175,11 @@ enum = do
   cons_ <- many constructor
   pure (Enum name_ cons_)
   where
-    constructor = Constructor <$> (symbol "|" *> name) <*> option [] arguments
+    constructor = do
+      constructorName <- symbol "|" *> name
+      constructorArguments <- option [] arguments
+      declareConstructor constructorName
+      pure (Constructor constructorName constructorArguments)
 
 external :: Parser Declaration
 external = do
@@ -193,6 +211,6 @@ module_ = sc *> many declaration <* eof
 
 parseDeclarations :: FilePath -> Text -> Either Text [Declaration]
 parseDeclarations path source =
-  case runParser (unParser module_) path source of
+  case runParser (evalStateT (unParser module_) Set.empty) path source of
     Right decls -> Right decls
     Left errors -> Left (pack (errorBundlePretty errors))

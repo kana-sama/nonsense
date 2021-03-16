@@ -4,13 +4,13 @@ enum nat
 
 def nat-plus(a b : nat) : nat :=
   match a with
-  | .zero := b
+  | zero := b
   | succ(x) := succ(nat-plus(x, b))
   end
 
 def nat-to-number(a : nat) : number :=
   match a with
-  | .zero := 0
+  | zero := 0
   | succ(x) := plus(nat-to-number(x), 1)
   end
 

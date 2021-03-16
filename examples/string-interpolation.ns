@@ -5,7 +5,7 @@ enum optional-string
 def with-default(d : string, opt : optional-string) : string :=
   match opt with
   | some(x) := x
-  | .none := d
+  | none := d
   end
 
 def make-hello(name : string) : string :=
