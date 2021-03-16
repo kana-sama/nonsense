@@ -1,21 +1,21 @@
-inductive optional-string : top =>
+enum optional-string
 | some(str : string)
 | none
 
-def with-default(d : string, opt : optional-string) : string =>
+def with-default(d : string, opt : optional-string) : string :=
   match opt with
-  | some(?x) => x
-  | none => d
+  | some(x) := x
+  | .none := d
   end
 
-def make-hello(name : string) : string =>
+def make-hello(name : string) : string :=
   <"Hello, ", name, "!">
 
-def get-name(hello : string) : optional-string =>
+def get-name(hello : string) : optional-string :=
   match hello with
-  | <"Hello, ", ?name, "!"> => some(name)
-  | ?other => none
+  | <"Hello, ", name, "!"> := some(name)
+  | _ := none
   end
 
-def x : string =>
+def x : string :=
   with-default("kana", get-name(make-hello("KANA")))

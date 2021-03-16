@@ -4,6 +4,6 @@ type bool = the<unknown, boolean>
 type tt = the<bool, true>
 type ff = the<bool, false>
 type not_1<x extends bool> = the<bool, x extends true ? false : true>
-type not_2<x extends bool> = the<bool, x extends tt ? ff : x extends ff ? tt : never>
+type not_2<x extends bool> = the<bool, x extends tt ? ff : x extends _ ? tt : never>
 type not_ff = the<bool, not_1<ff>>
 type not_tt = the<bool, not_2<tt>>

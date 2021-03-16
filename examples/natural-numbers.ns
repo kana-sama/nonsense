@@ -1,23 +1,23 @@
-inductive nat : top =>
+enum nat
 | zero
 | succ(pred : nat)
 
-def nat-plus(a b : nat) : nat =>
+def nat-plus(a b : nat) : nat :=
   match a with
-  | zero => b
-  | succ(?x) => succ(nat-plus(x, b))
+  | .zero := b
+  | succ(x) := succ(nat-plus(x, b))
   end
 
-def nat-to-number(a : nat) : number =>
+def nat-to-number(a : nat) : number :=
   match a with
-  | zero => 0
-  | succ(?x) => plus(nat-to-number(x), 1)
+  | .zero := 0
+  | succ(x) := plus(nat-to-number(x), 1)
   end
 
-def one : nat => succ(zero)
-def two : nat => succ(one)
-def three : nat => succ(two)
-def four : nat => succ(three)
+def one : nat := succ(zero)
+def two : nat := succ(one)
+def three : nat := succ(two)
+def four : nat := succ(three)
 
-def seven : nat => nat-plus(four, three)
-def seven-number : number => nat-to-number(seven)
+def seven : nat := nat-plus(four, three)
+def seven-number : number := nat-to-number(seven)

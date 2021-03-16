@@ -14,7 +14,7 @@ import System.FilePath (replaceExtensions)
 parseAndCheck :: FilePath -> IO [NS.Declaration]
 parseAndCheck inputPath = do
   input <- readFile inputPath
-  case NS.parseModule input of
+  case NS.parseDeclarations inputPath input of
     Right decls -> do
       case NS.check decls of
         Nothing -> pure decls

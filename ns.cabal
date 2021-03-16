@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 8a7485373dcd5e760fdad407a89016330137bce29fb583c9735ecd6717134118
+-- hash: 0b93227be7075c5b7f6df5b35cc0a689e1a9bc68962dc5328aba4b7a444e523a
 
 name:               ns
 version:            0.0.0
@@ -27,6 +27,7 @@ library
   ghc-options: -Wincomplete-patterns
   build-depends:
       base >=4.14.1.0 && <5
+    , containers
     , megaparsec
     , mtl
     , text

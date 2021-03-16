@@ -8,24 +8,26 @@ cabal run ns-exe typecheck example.ns
 ## roadmap:
 - [x] typecheker
 - [ ] typecheker with subtyping
+- [ ] warnings about var-patterns shadowing
 - [ ] polymorphism
 - [ ] pattern matching validation
-- [ ] string manipulations and interpolation
+- [ ] type inference for patterns let-in/match
+- [x] string manipulations and interpolation
 - [ ] do-notation
 - [ ] example with type-level parser!
 
 ## examples:
 ### function and constants
 ```lean
-def sum-of-three(a b c : number) : number =>
+def sum-of-three(a b c : number) : number :=
   plus(a, plus(b, c))
 
-def answer? : number =>
+def answer? : number :=
   sum-of-three(10, 20, 12)
 
-def answer-with-let? : number =>
-  let a : number => 10
-      b : number => 20
+def answer-with-let? : number :=
+  let a : number := 10
+      b : number := 20
    in sum-of-three(a, b, 12)
 ```
 ```typescript
@@ -43,16 +45,16 @@ type answer_with_let_qmark = the<number,
 ```
 
 ```lean
-def fst(x : tuple(number, string)) : number =>
+def fst(x : tuple(number, string)) : number :=
   match x with
-  | (?a, ?b) => a
+  | (?a, ?b) := a
 
-def snd(x : tuple(number, string)) : string =>
+def snd(x : tuple(number, string)) : string :=
   match x with
-  | (?a, ?b) => b
+  | (?a, ?b) := b
 
-def x : tuple(number, string) => (42, "hello")
-def y : tuple(string, number) => (snd(x), fst(x))
+def x : tuple(number, string) := (42, "hello")
+def y : tuple(string, number) := (snd(x), fst(x))
 ```
 ```typescript
 type fst<x extends [number, string]> = the<number,
@@ -68,23 +70,23 @@ type y = the<[string, number], [snd<x>, fst<x>]>
 
 ### inductive types and matching
 ```lean
-inductive rgb : top =>
+inductive rgb : top :=
 | mk-rgb(r g b : number)
 
-inductive color : top =>
+inductive color : top :=
 | red
 | green
 | blue
 | mix(v : rgb)
 
-def to-rgb(c : color) : rgb =>
+def to-rgb(c : color) : rgb :=
   match c with
-  | red => mk-rgb(255, 0, 0)
-  | green => mk-rgb(0, 255, 0)
-  | blue => mk-rgb(0, 0, 255)
-  | mix(?rgb) => rgb
+  | red := mk-rgb(255, 0, 0)
+  | green := mk-rgb(0, 255, 0)
+  | blue := mk-rgb(0, 0, 255)
+  | mix(?rgb) := rgb
 
-def colors : array(rgb) =>
+def colors : array(rgb) :=
   [ to-rgb(red)
   , to-rgb(blue)
   , to-rgb(mix(mk-rgb(10, 20, 30)))
@@ -123,18 +125,18 @@ type colors = the<rgb[], [
 ```
 
 ```lean
-inductive tree : top =>
+inductive tree : top :=
 | leaf(n : number)
 | node(l r : tree)
 
-def sum (x : tree) : number =>
+def sum (x : tree) : number :=
   match x with
-  | leaf(5) => 0
-  | leaf(?x) => x
-  | node(leaf(?a), leaf(?b)) => plus(10, plus(a, b))
-  | node(?l, ?r) => plus(sum(l), sum(r))
+  | leaf(5) := 0
+  | leaf(?x) := x
+  | node(leaf(?a), leaf(?b)) := plus(10, plus(a, b))
+  | node(?l, ?r) := plus(sum(l), sum(r))
 
-def q : number => sum(
+def q : number := sum(
   node(node(node(leaf(1), leaf(2)), node(leaf(3), leaf(4))), leaf(5))
 )
 ```
@@ -164,19 +166,19 @@ type q = the<number,
 
 ### externals and declares
 ```lean
-external bool : top => "boolean"
-external tt : bool => "true"
-external ff : bool => "false"
+external bool : top := "boolean"
+external tt : bool := "true"
+external ff : bool := "false"
 
-external not(x : bool) : bool => "x extends true ? false : true"
-def not-ff : bool => not(ff)
+external not(x : bool) : bool := "x extends true ? false : true"
+def not-ff : bool := not(ff)
 
-def not2(x : bool) : bool =>
+def not2(x : bool) : bool :=
   match x with
-  | tt => ff
-  | ff => tt
+  | tt := ff
+  | ff := tt
 
-def not-tt : bool => not2(tt)
+def not-tt : bool := not2(tt)
 ```
 ```typescript
 type bool = the<unknown, boolean>
@@ -198,12 +200,12 @@ declare boolean : top
 declare true : boolean
 declare false : boolean 
 
-def not(x : boolean) : boolean =>
+def not(x : boolean) : boolean :=
   match x with
-  | true => false
-  | ?other => true
+  | true := false
+  | ?other := true
 
-def not-not-not-true : boolean =>
+def not-not-not-true : boolean :=
   not(not(not(true)))
 ```
 ```typescript
@@ -218,32 +220,32 @@ type not_not_not_true = the<boolean,
 
 ### simple expression language
 ```lean
-def context : top => Record(string, number)
-external context-empty : context => "{}"
-external context-get(ctx : context, name : string) : number => "ctx[name]"
-external context-set(ctx : context, name : string, val : number) : context =>
+def context : top := Record(string, number)
+external context-empty : context := "{}"
+external context-get(ctx : context, name : string) : number := "ctx[name]"
+external context-set(ctx : context, name : string, val : number) : context :=
   "(Omit<ctx, name> & Record<name, val>)"
 
-inductive expr : top =>
+inductive expr : top :=
 | lit(value : number)
 | ref(variable : string)
 | add(a b : expr)
 | local(variable : string, value next : expr)
 
-def eval(ctx : context, e : expr) : number =>
+def eval(ctx : context, e : expr) : number :=
   match e with
-  | lit(?x) => x
-  | ref(?x) => context-get(ctx, x)
-  | add(?a, ?b) => plus(eval(ctx, a), eval(ctx, b))
-  | local(?name, ?value, ?next) =>
-      let evaled-value : number => eval(ctx, value)
-          new-context : context => context-set(ctx, name, evaled-value)
+  | lit(?x) := x
+  | ref(?x) := context-get(ctx, x)
+  | add(?a, ?b) := plus(eval(ctx, a), eval(ctx, b))
+  | local(?name, ?value, ?next) :=
+      let evaled-value : number := eval(ctx, value)
+          new-context : context := context-set(ctx, name, evaled-value)
        in eval(new-context, next)
 
-def pure(e : expr) : number =>
+def pure(e : expr) : number :=
   eval(context-empty, e)
 
-def a : number =>
+def a : number :=
   pure(local("a", add(lit(1), lit(20)), add(ref("a"), ref("a"))))
 ```
 ```typescript

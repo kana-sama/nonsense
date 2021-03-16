@@ -1,21 +1,21 @@
-inductive rgb : top =>
+enum rgb
 | mk-rgb(r g b : number)
 
-inductive color : top =>
+enum color
 | red
 | green
 | blue
 | mix(v : rgb)
 
-def to-rgb(c : color) : rgb =>
+def to-rgb(c : color) : rgb :=
   match c with
-  | red => mk-rgb(255, 0, 0)
-  | green => mk-rgb(0, 255, 0)
-  | blue => mk-rgb(0, 0, 255)
-  | mix(?rgb) => rgb
+  | .red := mk-rgb(255, 0, 0)
+  | .green := mk-rgb(0, 255, 0)
+  | .blue := mk-rgb(0, 0, 255)
+  | mix(rgb) := rgb
   end
 
-def colors : array(rgb) =>
+def colors : array(rgb) :=
   [ to-rgb(red)
   , to-rgb(blue)
   , to-rgb(mix(mk-rgb(10, 20, 30)))

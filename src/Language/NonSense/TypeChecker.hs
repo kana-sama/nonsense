@@ -19,12 +19,10 @@ data TypeCheckError
   | FunctionUsedAsValue Name
   | ValueUsedAsFunction Name
   | InvalidArrayElementsTypes (Actual [Expr])
-  | FailToInferTypeOfWildCard Name
   | InvalidTypeFor Expr (Actual Type) (Expected Type)
-  | UnsupportedPattern Expr
   | InvalidProductLength (Actual Int) (Expected Int)
-  | ExpectedTypeFor Expr Type
-  | TypeAnnotationIsNotMatchable
+  | InvalidPatternTypeFor Pattern (Expected Expr)
+  | UnexpectedPatternForTypeInference Pattern
   deriving stock (Show)
 
 data Type
@@ -101,9 +99,9 @@ withDeclaredContextItem item = withDeclaredContextItems [item]
 
 withDeclaredContextItems :: [(Name, Type)] -> TC a -> TC a
 withDeclaredContextItems newContext = modifyEnv \(Env context mutuals callStack) ->
-  let -- do not declare names, that are already declared as mutual
+  let -- do not declare names, that are already declared as mutuals
       newContextWithoutMutuals = filter (\(name, _) -> name `notElem` mutuals) newContext
-      -- remove new names from mutual list
+      -- remove new names from the mutuals list
       mutualsWithoutNewContext = filter (`notElem` (fst <$> newContext)) mutuals
    in Env (reverse newContextWithoutMutuals <> context) mutualsWithoutNewContext callStack
   where
@@ -113,69 +111,81 @@ withMutualDeclarations :: [Name] -> TC a -> TC a
 withMutualDeclarations newMutuals = modifyEnv \(Env context mutuals callStack) ->
   Env context (newMutuals <> mutuals) callStack
 
-checkExprIs :: Type -> Expr -> TC ()
-checkExprIs type_ expr = do
-  actualType <- inferExpr expr
-  unless (Value actualType == type_) do
-    fail (InvalidTypeFor expr (Actual (Value actualType)) (Expected type_))
+exprHasType :: Expr -> Expr -> TC ()
+exprHasType expr type_ = do
+  actualType <- inferExprType expr
+  unless (actualType == type_) do
+    fail (InvalidTypeFor expr (Actual (Value actualType)) (Expected (Value type_)))
 
-hasWildcards :: Expr -> Bool
-hasWildcards (App _ args) = any hasWildcards args
-hasWildcards (Annotated value type_) = hasWildcards value || hasWildcards type_
-hasWildcards (Interpolation parts) = any hasWildcards parts
-hasWildcards (Array elems) = any hasWildcards elems
-hasWildcards (ArrayType t) = hasWildcards t
-hasWildcards (Tuple elems) = any hasWildcards elems
-hasWildcards (TupleType elems) = any hasWildcards elems
-hasWildcards (Wildcard _) = True
-hasWildcards (Match value cases) = hasWildcards value || any (\(pat, val) -> hasWildcards pat || hasWildcards val) cases
-hasWildcards (Let bindings next) = any (\(LetBinding _ type_ value) -> hasWildcards type_ || hasWildcards value) bindings || hasWildcards next
-hasWildcards _ = False
+patternHasType :: Pattern -> Expr -> TC ()
+patternHasType pat type_ = do
+  actualType <- inferPatternType pat
+  unless (actualType == type_) do
+    fail (InvalidPatternTypeFor pat (Expected type_))
 
-withPatternOf :: Type -> Expr -> TC a -> TC a
-withPatternOf valueType pat next = do
-  case (pat, valueType) of
-    (Var {}, _) -> checkExprIs valueType pat >> next
-    (App name args, _) -> do
+inferPatternType :: Pattern -> TC Expr
+inferPatternType PatternWildcard = fail (UnexpectedPatternForTypeInference PatternWildcard)
+inferPatternType (PatternAnnotated pat type_) = do
+  type_ `exprHasType` ExprTop
+  pure type_
+inferPatternType (PatternVar name) = fail (UnexpectedPatternForTypeInference (PatternVar name))
+inferPatternType (PatternDot name) = inferExprType (ExprVar name)
+inferPatternType (PatternConstructor name arguments) = do
+  (_, resultType) <- lookupForFunction name
+  pure resultType
+inferPatternType (PatternNumber _) = pure ExprNumberType
+inferPatternType (PatternString _) = pure ExprStringType
+inferPatternType (PatternBoolean _) = pure ExprBooleanType
+inferPatternType (PatternInterpolation _) = pure ExprStringType
+inferPatternType (PatternArray elements) = fail (UnexpectedPatternForTypeInference (PatternArray elements))
+inferPatternType (PatternTuple elements) = fail (UnexpectedPatternForTypeInference (PatternTuple elements))
+
+-- TODO: merge patternHasType and withPatternOfType
+withPatternOfType :: Expr -> Pattern -> TC a -> TC a
+withPatternOfType valueType pat next = do
+  case pat of
+    PatternWildcard -> next
+    PatternAnnotated value type_ -> do
+      type_ `exprHasType` ExprTop
+      unless (valueType == type_) do
+        fail (InvalidPatternTypeFor pat (Expected valueType))
+      withPatternOfType type_ value next
+    PatternVar name -> withDeclared name (Value valueType) next
+    PatternDot name -> ExprVar name `exprHasType` valueType >> next
+    PatternConstructor name args -> do
       (argsTypes, constructorType) <- lookupForFunction name
-      unless (valueType == Value constructorType) do
-        fail (InvalidTypeFor pat (Actual (Value constructorType)) (Expected valueType))
-      checkProduct (Value <$> argsTypes) args next
-    (Annotated _ type_, _) | hasWildcards type_ -> fail TypeAnnotationIsNotMatchable
-    (Annotated value type_, _) -> do
-      unless (valueType == Value type_) do
-        fail (ExpectedTypeFor pat valueType)
-      withPatternOf (Value type_) value next
-    (Number {}, _) -> checkExprIs valueType pat >> next
-    (String {}, _) -> checkExprIs valueType pat >> next
-    (Boolean {}, _) -> checkExprIs valueType pat >> next
-    (Interpolation parts, _) -> traverseProduct (zip parts (repeat (Value StringType))) next
-    (Array as, Value (ArrayType t)) -> traverseProduct (zip as (repeat (Value t))) next
-    (Array {}, _) -> fail (ExpectedTypeFor pat valueType)
-    (ArrayType a, _) -> withPatternOf (Value Top) a next
-    (Tuple args, Value (TupleType argsTypes)) -> checkProduct (Value <$> argsTypes) args next
-    (Tuple {}, _) -> fail (ExpectedTypeFor pat valueType)
-    (TupleType as, _) -> traverseProduct (zip as (repeat (Value Top))) next
-    (Wildcard name, _) -> withDeclared name valueType next
-    (Match _ _, _) -> fail (UnsupportedPattern pat)
-    (Let _ _, _) -> fail (UnsupportedPattern pat)
-    (Top, _) -> checkExprIs valueType pat >> next
-    (Bottom, _) -> checkExprIs valueType pat >> next
+      unless (valueType == constructorType) do
+        fail (InvalidPatternTypeFor pat (Expected valueType))
+      checkProductTypes argsTypes args next
+    PatternNumber _ -> pat `patternHasType` valueType >> next
+    PatternString {} -> pat `patternHasType` valueType >> next
+    PatternBoolean {} -> pat `patternHasType` valueType >> next
+    PatternInterpolation parts -> traverseProduct (zip parts (repeat ExprStringType)) next
+    PatternArray elements ->
+      case valueType of
+        ExprArrayType elementType ->
+          traverseProduct (zip elements (repeat elementType)) next
+        _ -> fail (InvalidPatternTypeFor pat (Expected valueType))
+    PatternTuple elements ->
+      case valueType of
+        ExprTupleType elementsTypes ->
+          checkProductTypes elementsTypes elements next
+        _ -> fail (InvalidPatternTypeFor pat (Expected valueType))
   where
-    checkProduct formals pats next = do
-      unless (length formals == length pats) do
-        fail (InvalidProductLength (Actual (length pats)) (Expected (length formals)))
-      traverseProduct (zip pats formals) next
+    checkProductTypes types pats next = do
+      unless (length types == length pats) do
+        fail (InvalidProductLength (Actual (length pats)) (Expected (length types)))
+      traverseProduct (zip pats types) next
 
     traverseProduct [] next = next
     traverseProduct ((pat, expectedPatType) : pats) next = do
-      withPatternOf expectedPatType pat do
+      withPatternOfType expectedPatType pat do
         traverseProduct pats next
 
-withArguments :: Arguments -> TC a -> TC a
+withArguments :: [Argument] -> TC a -> TC a
 withArguments [] next = next
-withArguments ((name_, type_) : args) next = do
-  checkExprIs (Value Top) type_
+withArguments (Argument name_ type_ : args) next = do
+  type_ `exprHasType` ExprTop
   withDeclared name_ (Value type_) do
     withArguments args next
 
@@ -184,97 +194,81 @@ withArguments ((name_, type_) : args) next = do
 -- n    - number
 -- s    - string
 -- t    - type
-inferExpr :: Expr -> TC Expr
+-- p    - pattern
+inferExprType :: Expr -> TC Expr
 --
 --  x : t ∈ Г
 --  ─────────
 --  Г ⊢ x : t
-inferExpr (Var x) = lookupForValue x
+inferExprType (ExprVar x) = lookupForValue x
 --
 --  (t₁, …, tᵤ) → t ∈ Г; Г ⊢ a₁ : t₁, …, aᵤ : tᵤ
 --  ────────────────────────────────────────────
 --              Г ⊢ f(a₁, …, aᵤ) : t
-inferExpr (App fun args) = do
-  (formalArgsTypes, resultType) <- lookupForFunction fun
-  actualArgsTypes <- for args inferExpr
+inferExprType (ExprApp name args) = do
+  (formalArgsTypes, resultType) <- lookupForFunction name
+  actualArgsTypes <- traverse inferExprType args
   unless (formalArgsTypes == actualArgsTypes) do
-    fail (InvalidArgumentTypeFor fun (Expected formalArgsTypes) (Actual actualArgsTypes))
+    fail (InvalidArgumentTypeFor name (Expected formalArgsTypes) (Actual actualArgsTypes))
   pure resultType
 --
 --   Г ⊢ a : t
 --  ───────────
 --  (a : t) : t
-inferExpr (Annotated value type_) = do
-  checkExprIs (Value type_) value
+inferExprType (ExprAnnotated value type_) = do
+  value `exprHasType` type_
   pure type_
 --
 --  ──────────
 --  n : number
-inferExpr (Number _) = pure NumberType
+inferExprType (ExprNumber _) = pure ExprNumberType
 --
 --  ──────────
---  s : number
-inferExpr (String _) = pure StringType
+--  s : string
+inferExprType (ExprString _) = pure ExprStringType
 --
 --  ───────────────────────────────
 --  true : boolean, false : boolean
-inferExpr (Boolean _) = pure BooleanType
+inferExprType (ExprBoolean _) = pure ExprBooleanType
 --
 --    Г ⊢ a₁ … aᵤ : string
 --  ────────────────────────
 --  Г ⊢ <a₁, …, aᵤ> : string
-inferExpr (Interpolation parts) = do
-  for parts (checkExprIs (Value StringType))
-  pure StringType
+inferExprType (ExprInterpolation parts) = do
+  traverse (`exprHasType` ExprStringType) parts
+  pure ExprStringType
 --
 --  ─────────────
 --  [] : array(⊤)
-inferExpr (Array []) = pure Top
+inferExprType (ExprArray []) = pure ExprTop
 --
 --       Г ⊢ a₁ … aᵤ : t
 --  ──────────────────────────
 --  Г ⊢ [a₁, …, aᵤ] : array(t)
-inferExpr (Array elems) = do
-  elemTypes <- for elems inferExpr
+inferExprType (ExprArray elems) = do
+  elemTypes <- traverse inferExprType elems
   unless (all (== head elemTypes) elemTypes) do
     fail (InvalidArrayElementsTypes (Actual elemTypes))
-  pure (ArrayType (head elemTypes))
---
---     Г ⊢ t : ⊤
---  ────────────────
---  Г ⊢ array(t) : ⊤
-inferExpr (ArrayType elemType) = do
-  elemTypeType <- inferExpr elemType
-  checkExprIs (Value Top) elemTypeType
-  pure Top
+  pure (ExprArrayType (head elemTypes))
 --
 --       Г ⊢ a₁ : t₁, …, aᵤ : tᵤ
 --  ──────────────────────────────────
 --  Г ⊢ (a₁, …, aᵤ) : tuple(t₁, …, tᵤ)
-inferExpr (Tuple elems) = TupleType <$> for elems inferExpr
---
---       Г ⊢ t₁ … tᵤ : ⊤
---  ─────────────────────────
---  Г ⊢ tuple(t₁, …, tᵤ) : ⊤
-inferExpr (TupleType elemsTypes) = do
-  for elemsTypes \elemType -> do
-    checkExprIs (Value Top) elemType
-  pure Top
-inferExpr (Wildcard name) = fail (FailToInferTypeOfWildCard name)
+inferExprType (ExprTuple elems) = ExprTupleType <$> traverse inferExprType elems
 --
 --  ───────────────────────
 --  Г ⊢ match a with {} : ⊥
-inferExpr (Match a []) = pure Bottom
+inferExprType (ExprMatch a []) = pure ExprBottom
 --
---   Г ⊢ a : t₁; ∀i, Г, wildcars(pᵢ) ⊢ pᵢ : t₁, bᵢ : t₂
+--   Г ⊢ a : t₁; ∀i, Г, bindings(pᵢ) ⊢ pᵢ : t₁, bᵢ : t₂
 --  ────────────────────────────────────────────────────
---     Г ⊢ match a with {p₁ => b₁, …, pᵤ => bᵤ} : t₂
-inferExpr (Match a cases) = do
+--     Г ⊢ match a with {p₁ := b₁, …, pᵤ := bᵤ} : t₂
+inferExprType (ExprMatch a cases) = do
   withStackFrame ("match: " <> show a) do
-    t1 <- inferExpr a
-    valuesTypes <- for cases \(pat, value) -> do
+    t1 <- inferExprType a
+    valuesTypes <- for cases \(CaseBranch pat value) -> do
       withStackFrame ("pattern: " <> show pat) do
-        withPatternOf (Value t1) pat (inferExpr value)
+        withPatternOfType t1 pat (inferExprType value)
     unless (all (== head valuesTypes) valuesTypes) do
       fail (InvalidArrayElementsTypes (Actual valuesTypes))
     pure (head valuesTypes)
@@ -282,37 +276,61 @@ inferExpr (Match a cases) = do
 --     Г ⊢ x : t
 --  ────────────────
 --  Г ⊢ let in x : t
-inferExpr (Let [] next) = inferExpr next
+inferExprType (ExprLet [] next) = inferExprType next
 --
---  Г ⊢ t₁ : ⊤, x : t₁;  Г, x : t₁ ⊢ let xs in b : t₂
---  ──────────────────────────────────────────────────
---           Г ⊢ let x : t₁ = a, xs in b : t₂
-inferExpr (Let (LetBinding name type_ value : bindings) next) = do
-  withStackFrame (unName name) do
-    checkExprIs (Value Top) type_
-    checkExprIs (Value type_) value
-    withDeclared name (Value type_) do
-      inferExpr (Let bindings next)
+--  Г ⊢ t₁ : ⊤, a : t₁;  Г, bindings(p) ⊢ p : t₁, let xs in b : t₂
+--  ───────────────────────────────────────────────────────────────
+--                 Г ⊢ let p : t₁ := a, xs in b : t₂
+inferExprType (ExprLet (LetBinding pat type_ value : bindings) next) = do
+  withStackFrame (show pat) do
+    type_ `exprHasType` ExprTop
+    value `exprHasType` type_
+    withPatternOfType type_ pat do
+      inferExprType (ExprLet bindings next)
+--
+--  ──────────
+--  number : ⊤
+inferExprType ExprNumberType = pure ExprTop
+--
+--  ──────────
+--  string : ⊤
+inferExprType ExprStringType = pure ExprTop
+--
+--  ───────────
+--  boolean : ⊤
+inferExprType ExprBooleanType = pure ExprTop
+--
+--     Г ⊢ t : ⊤
+--  ────────────────
+--  Г ⊢ array(t) : ⊤
+inferExprType (ExprArrayType elemType) = do
+  elemType `exprHasType` ExprTop
+  pure ExprTop
+--
+--       Г ⊢ t₁ … tᵤ : ⊤
+--  ─────────────────────────
+--  Г ⊢ tuple(t₁, …, tᵤ) : ⊤
+inferExprType (ExprTupleType elemsTypes) = do
+  traverse (`exprHasType` ExprTop) elemsTypes
+  pure ExprTop
 --
 --  ──────
 --  ⊤ : ⊤
-inferExpr Top = pure Top
+inferExprType ExprTop = pure ExprTop
 --
 --  ──────
 --  ⊥ : ⊤
-inferExpr Bottom = pure Top
+inferExprType ExprBottom = pure ExprTop
 
-makeContextItem :: Name -> Arguments -> Expr -> (Name, Type)
+makeContextItem :: Name -> [Argument] -> Expr -> (Name, Type)
 makeContextItem name [] type_ = (name, Value type_)
-makeContextItem name args type_ = (name, Function (snd <$> args) type_)
+makeContextItem name args type_ = (name, Function [type_ | Argument name type_ <- args] type_)
 
 getContextItems :: Declaration -> [(Name, Type)]
 getContextItems (Definition name args type_ _) = [makeContextItem name args type_]
-getContextItems (Inductive name args constructors) = makeContextItem name args Top : constructorItems
+getContextItems (Enum name constructors) = makeContextItem name [] ExprTop : constructorItems
   where
-    constructorItems = do
-      Constructor conName conArgs <- constructors
-      pure (makeContextItem conName conArgs (Var name))
+    constructorItems = [makeContextItem conName conArgs (ExprVar name) | Constructor conName conArgs <- constructors]
 getContextItems (External name args type_ _) = [makeContextItem name args type_]
 getContextItems (Declare name args type_) = [makeContextItem name args type_]
 -- ignore nested declarations
@@ -325,27 +343,29 @@ checkDeclaration decl@(Definition name args type_ body) next = do
   withStackFrame (unName name) do
     withArguments args do
       withDeclaredContextItem contextItem do
-        checkExprIs (Value type_) body
+        type_ `exprHasType` ExprTop
+        body `exprHasType` type_
   withDeclaredContextItem contextItem next
-checkDeclaration decl@(Inductive name args constructors) next = do
+checkDeclaration decl@(Enum name constructors) next = do
   let contextItem : constructorItems = getContextItems decl
   checkUndeclared name
   withStackFrame (unName name) do
-    withArguments args do
-      withDeclaredContextItem contextItem do
-        for_ constructors \(Constructor name args) -> do
-          checkUndeclared name
-          withArguments args (pure ())
+    withDeclaredContextItem contextItem do
+      for_ constructors \(Constructor name args) -> do
+        checkUndeclared name
+        withArguments args (pure ())
   withDeclaredContextItems (contextItem : constructorItems) next
 checkDeclaration decl@(External name args type_ _) next = do
   checkUndeclared name
   withStackFrame (unName name) do
-    withArguments args (pure ())
+    withArguments args do
+      type_ `exprHasType` ExprTop
   withDeclaredContextItems (getContextItems decl) next
 checkDeclaration decl@(Declare name args type_) next = do
   checkUndeclared name
   withStackFrame (unName name) do
-    withArguments args (pure ())
+    withArguments args do
+      type_ `exprHasType` ExprTop
   withDeclaredContextItems (getContextItems decl) next
 checkDeclaration decl@(Mutual declarations) next = do
   let contextItems = foldMap getContextItems declarations
@@ -364,12 +384,8 @@ checkDeclarations (decl : decls) next = do
 
 defaultContext :: Context
 defaultContext =
-  [ ("number", Value Top),
-    ("string", Value Top),
-    ("boolean", Value Top),
-    ("Record", Function [Top, Top] Top),
-    ("the", Function [Top, Var "a"] (Var "a")),
-    ("plus", Function [NumberType, NumberType] NumberType)
+  [ ("the", Function [ExprTop, ExprVar "a"] (ExprVar "a")),
+    ("plus", Function [ExprNumberType, ExprNumberType] ExprNumberType)
   ]
 
 check :: [Declaration] -> Maybe (Env, TypeCheckError)

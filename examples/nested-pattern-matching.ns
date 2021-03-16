@@ -1,15 +1,15 @@
-inductive tree : top =>
+enum tree
 | leaf(n : number)
 | node(l r : tree)
 
-def sum (x : tree) : number =>
+def sum (x : tree) : number :=
   match x with
-  | leaf(5) => 0
-  | leaf(?x) => x
-  | node(leaf(?a), leaf(?b)) => plus(10, plus(a, b))
-  | node(?l, ?r) => plus(sum(l), sum(r))
+  | leaf(5) := 0
+  | leaf(x) := x
+  | node(leaf(a), leaf(b)) := plus(10, plus(a, b))
+  | node(l, r) := plus(sum(l), sum(r))
   end
 
-def q : number => sum(
+def q : number := sum(
   node(node(node(leaf(1), leaf(2)), node(leaf(3), leaf(4))), leaf(5))
 )

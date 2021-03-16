@@ -1,22 +1,22 @@
-inductive nat : top =>
+enum nat
 | zero
 | succ(pred : nat)
 
 mutual  
-  def even(x : nat) : boolean =>
+  def even(x : nat) : boolean :=
     match x with
-    | zero => true
-    | succ(?n) => odd(n)
+    | .zero := true
+    | succ(n) := odd(n)
     end
 
 
-  def odd(x : nat) : boolean =>
+  def odd(x : nat) : boolean :=
     match x with
-    | zero => false
-    | succ(?n) => even(n)
+    | .zero := false
+    | succ(n) := even(n)
     end
 end
 
-def x : nat => succ(succ(succ(succ(succ(zero))))) # 5
-def even-5? : boolean => even(x)
-def odd-5? : boolean => odd(x)
+def x : nat := succ(succ(succ(succ(succ(zero))))) # 5
+def even-5? : boolean := even(x)
+def odd-5? : boolean := odd(x)
