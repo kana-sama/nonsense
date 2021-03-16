@@ -7,5 +7,5 @@ type red = the<color, "red">
 type green = the<color, "green">
 type blue = the<color, "blue">
 type mix<v extends rgb> = the<color, ["mix", v]>
-type to_rgb<c extends color> = the<rgb, c extends red ? mk_rgb<255, 0, 0> : c extends green ? mk_rgb<0, 255, 0> : c extends blue ? mk_rgb<0, 0, 255> : c extends mix<(infer rgb)> ? rgb : never>
+type to_rgb<c extends color> = the<rgb, c extends red ? mk_rgb<255, 0, 0> : c extends green ? mk_rgb<0, 255, 0> : c extends blue ? mk_rgb<0, 0, 255> : c extends mix<(infer val)> ? val : never>
 type colors = the<rgb[], [to_rgb<red>, to_rgb<blue>, to_rgb<mix<mk_rgb<10, 20, 30>>>]>

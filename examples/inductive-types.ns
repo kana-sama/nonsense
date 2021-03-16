@@ -12,7 +12,7 @@ def to-rgb(c : color) : rgb :=
   | red := mk-rgb(255, 0, 0)
   | green := mk-rgb(0, 255, 0)
   | blue := mk-rgb(0, 0, 255)
-  | mix(rgb) := rgb
+  | mix(val) := val
   end
 
 def colors : array(rgb) :=
