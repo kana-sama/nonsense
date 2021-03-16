@@ -5,5 +5,5 @@ type some<str extends string> = the<optional_string, ["some", str]>
 type none = the<optional_string, "none">
 type with_default<d extends string, opt extends optional_string> = the<string, opt extends some<(infer x)> ? x : opt extends none ? d : never>
 type make_hello<name extends string> = the<string, `Hello, ${name}!`>
-type get_name<hello extends string> = the<optional_string, hello extends `Hello, ${(infer name)}!` ? some<name> : hello extends _ ? none : never>
+type get_name<hello extends string> = the<optional_string, hello extends `Hello, ${(infer name)}!` ? some<name> : hello extends unknown ? none : never>
 type x = the<string, with_default<"kana", get_name<make_hello<"KANA">>>>

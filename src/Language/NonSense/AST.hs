@@ -24,7 +24,7 @@ data Declaration
   | Mutual [Declaration]
   deriving stock (Show, Eq)
 
-data LetBinding = LetBinding Pattern Type Expr
+data LetBinding = LetBinding Pattern Expr
   deriving stock (Eq, Show)
 
 data CaseBranch = CaseBranch Pattern Expr

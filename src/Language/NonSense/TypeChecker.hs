@@ -278,13 +278,12 @@ inferExprType (ExprMatch a cases) = do
 --  Г ⊢ let in x : t
 inferExprType (ExprLet [] next) = inferExprType next
 --
---  Г ⊢ t₁ : ⊤, a : t₁;  Г, bindings(p) ⊢ p : t₁, let xs in b : t₂
---  ───────────────────────────────────────────────────────────────
---                 Г ⊢ let p : t₁ := a, xs in b : t₂
-inferExprType (ExprLet (LetBinding pat type_ value : bindings) next) = do
+--  Г ⊢ a : t₁;  Г, bindings(p) ⊢ p : t₁, let xs in b : t₂
+--  ───────────────────────────────────────────────────────
+--               Г ⊢ let p := a, xs in b : t₂
+inferExprType (ExprLet (LetBinding pat value : bindings) next) = do
   withStackFrame (show pat) do
-    type_ `exprHasType` ExprTop
-    value `exprHasType` type_
+    type_ <- inferExprType value
     withPatternOfType type_ pat do
       inferExprType (ExprLet bindings next)
 --

@@ -127,7 +127,7 @@ expr =
     tuple = parens "()" items <&> ExprTuple
     caseBranch = CaseBranch <$> (symbol "|" *> pattern') <*> (symbol ":=" *> expr)
     match = ExprMatch <$> (keyword "match" *> expr <* keyword "with") <*> (caseBranch `manyTill` keyword "end")
-    letBinding = LetBinding <$> pattern' <*> (symbol ":" *> expr) <*> (symbol ":=" *> expr)
+    letBinding = LetBinding <$> pattern' <*> (symbol ":=" *> expr)
     let_ = ExprLet <$> (keyword "let" *> many letBinding) <*> (keyword "in" *> expr)
     numberType = keyword "number" $> ExprNumberType
     stringType = keyword "string" $> ExprStringType

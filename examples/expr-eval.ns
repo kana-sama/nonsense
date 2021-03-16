@@ -16,8 +16,8 @@ def eval(ctx : context, e : expr) : number :=
   | ref(x) := context-get(ctx, x)
   | add(a, b) := plus(eval(ctx, a), eval(ctx, b))
   | local(name, value, next) :=
-      let evaled-value : number := eval(ctx, value)
-          new-context : context := context-set(ctx, name, evaled-value)
+      let (evaled-value : number) := eval(ctx, value)
+          new-context := context-set(ctx, name, evaled-value)
        in eval(new-context, next)
   end
 

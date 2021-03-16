@@ -14,7 +14,7 @@ typed :: TS.Expr -> TS.Expr -> TS.Expr
 typed type_ expr = TS.App "the" [type_, expr]
 
 transpilePattern :: NS.Pattern -> TS.Expr
-transpilePattern NS.PatternWildcard = TS.Var "_" Nothing
+transpilePattern NS.PatternWildcard = TS.Unknown
 transpilePattern (NS.PatternAnnotated pattern_ type_) = typed (transpileExpr type_) (transpilePattern pattern_)
 transpilePattern (NS.PatternVar name) = TS.Infer (transpileName name)
 transpilePattern (NS.PatternDot name) = TS.Var (transpileName name) Nothing
@@ -30,8 +30,8 @@ transpilePattern (NS.PatternArray elements) = TS.ArrayLit (transpilePattern <$> 
 transpilePattern (NS.PatternTuple elements) = TS.ArrayLit (transpilePattern <$> elements)
 
 transpileLetBinding :: NS.LetBinding -> TS.Expr -> TS.Expr
-transpileLetBinding (NS.LetBinding pattern_ type_ value) next =
-  TS.Extends (transpileExpr value) (typed (transpileExpr type_) (transpilePattern pattern_)) next TS.Never
+transpileLetBinding (NS.LetBinding pattern_ value) next =
+  TS.Extends (transpileExpr value) (transpilePattern pattern_) next TS.Never
 
 -- -- TODO: optimizer for _ and full var
 transpileCaseBranch :: TS.Expr -> NS.CaseBranch -> TS.Expr -> TS.Expr

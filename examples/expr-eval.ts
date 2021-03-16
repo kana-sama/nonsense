@@ -9,6 +9,6 @@ type lit<value extends number> = the<expr, ["lit", value]>
 type ref<variable extends string> = the<expr, ["ref", variable]>
 type add<a extends expr, b extends expr> = the<expr, ["add", a, b]>
 type local<variable extends string, value extends expr, next extends expr> = the<expr, ["local", variable, value, next]>
-type eval<ctx extends context, e extends expr> = the<number, e extends lit<(infer x)> ? x : e extends ref<(infer x)> ? context_get<ctx, x> : e extends add<(infer a), (infer b)> ? plus<eval<ctx, a>, eval<ctx, b>> : e extends local<(infer name), (infer value), (infer next)> ? eval<ctx, value> extends the<number, (infer evaled_value)> ? context_set<ctx, name, evaled_value> extends the<context, (infer new_context)> ? eval<new_context, next> : never : never : never>
+type eval<ctx extends context, e extends expr> = the<number, e extends lit<(infer x)> ? x : e extends ref<(infer x)> ? context_get<ctx, x> : e extends add<(infer a), (infer b)> ? plus<eval<ctx, a>, eval<ctx, b>> : e extends local<(infer name), (infer value), (infer next)> ? eval<ctx, value> extends the<number, (infer evaled_value)> ? context_set<ctx, name, evaled_value> extends (infer new_context) ? eval<new_context, next> : never : never : never>
 type pure<e extends expr> = the<number, eval<context_empty, e>>
 type a = the<number, pure<local<"a", add<lit<1>, lit<20>>, add<ref<"a">, ref<"a">>>>>
